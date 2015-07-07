@@ -1,0 +1,5 @@
+#Properties file for stanford corenlp pipeline
+#annotators=tokenize,ssplit,pos,parse,lemma
+annotators=tokenize,ssplit,pos,depparse,lemma
+#parse.model=edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz
+#parse.model=edu/stanford/nlp/models/lexparser/englishFactored.ser.gz

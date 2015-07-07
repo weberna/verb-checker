@@ -1,0 +1,11 @@
+The entire pipeline consists of the following steps:
+1. use the 'run_pipeline.sh <filename>' script to run the Stanford CoreNLP pipeline 
+	on a data file to produce an annotated xml file.
+2. use the python script, 'python process_data.py <filename.xml> <mallet_data_file>' to
+	produce data that can be read by Mallet
+3. use the 'train_crf.sh <crf_file> <mallet_data_file>' to train the crf with Mallet
+4. use the 'test_crf.sh <crf_file> <test_mallet_data_file>' to test the crf with test data
+5. (optional) run sed 's/[A-Z]*\[[a-z]*\]$//' <mallet_data_file> to remove the
+	label in the test data for testing
+
+
