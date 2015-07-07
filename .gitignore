@@ -1,0 +1,17 @@
+*.class
+testinput*
+*_paper*
+trainingoutput
+seqfile
+brown*
+*.xml
+*.txt
+*.mallet
+_pycache_/
+acl-arc/
+fce-released-dataset/
+mallet/
+mallet-src/
+MASC-3.0.0/
+stanford-corenlp/
+
