@@ -63,7 +63,7 @@ def in_verblist(lem):
 	else:
 		return False
 
-def create_data(sents, filename='data_mallet.txt', unlabeled=False):
+def create_data(sents, filename='data_mallet.txt', unlabeled=False, labels_file=None):
 	"""Write a data file that can be used for training
 		or testing CRFs in Mallet. The data is written 
 		in the following form:
@@ -77,28 +77,36 @@ def create_data(sents, filename='data_mallet.txt', unlabeled=False):
 	"""
 	prev_sen = None
 	outfile = open(filename, 'w')
+	if labels_file:
+		lfile = open(labels_file, 'w')
 	for s in sents:
 		for tok in s.sen:
 			if tok.isverb() and tok.pos != 'MD': 
 				feats = Features(tok, s, prev_sen)
 				if unlabeled:
-					feats.fvect.pop() #get rid of label
+					lab = feats.fvect.pop() #get rid of label
+					if labels_file:  #write the label to the seperate label file
+						lfile.write("{}\n".format(lab))	
 				str_feats = " ".join([str(x) for x in feats.fvect])
 				outfile.write("{}\n".format(str_feats))
 #				if last_in_chain(tok, s):   #sequence ends at verb phrase
 #					outfile.write("\n")
 			if tok.word == '.':				#sequence ends at sentence end
 				outfile.write("\n")
+				if labels_file:
+					lfile.write("\n")
 		prev_sen = s
 	outfile.close()
 		
-
 if __name__ == "__main__":	
 	infile = sys.argv[1]
 	outfile = sys.argv[2]
 	sents = read_xml(infile)
-	if len(sys.argv) > 3 and sys.argv[3] == 'nolabels':
-		create_data(sents, outfile, True)
+	if len(sys.argv) > 3:
+		if sys.argv[3] == 'nolabels':
+			create_data(sents, outfile, True)
+		else:
+			create_data(sents, outfile, True, sys.argv[3])
 	else:
 		create_data(sents, outfile)
 	print("done")
