@@ -52,6 +52,8 @@ import cc.mallet.util.MalletLogger;
 
 
 public class VerbTagger {
+	
+	public static final double THRESHOLD = 1.0;
 
 	private static Logger logger =
 		MalletLogger.getLogger(VerbTagger.class.getName());
@@ -136,14 +138,35 @@ public class VerbTagger {
 		return answers;
 	}
 
+	/* Convience method that does all that is needed in one go,
+		finds both the absolute best sequence, as well as its weight, and
+		the weight of the original sequence inputed in.
+		@ret:
+			An ArrayList of SequencePairAlignments (ie a structure that holds the output sequence and its weight)
+			The first element of the return value is the original output/weight, the second element is the best output/weight
+	*/
+	public static ArrayList<SequencePairAlignment<Object, Object>> getAllSequenceData(Transducer model, Sequence input, Sequence origOut) {
+			ArrayList<SequencePairAlignment<Object, Object>> ret = new ArrayList<SequencePairAlignment<Object, Object>>(2);
+			MaxLatticeDefault bestLattice= 	
+				new MaxLatticeDefault (model, input, null, cacheSizeOption.value());
+			MaxLatticeDefault origLattice= 	
+				new MaxLatticeDefault (model, input, origOut, cacheSizeOption.value());
+			List<SequencePairAlignment<Object, Object>> newOut = bestLattice.bestOutputAlignments(1);
+			List<SequencePairAlignment<Object, Object>> oldOut = origLattice.bestOutputAlignments(1);
+			ret.add(oldOut.get(0));
+			ret.add(newOut.get(0));
+			return ret;
+	}
+	
 	public static double getSequenceWeight(Transducer model, Sequence input, Sequence output) {
 		MaxLatticeDefault lattice =
 			new MaxLatticeDefault (model, input, output, cacheSizeOption.value());
 
 			List<SequencePairAlignment<Object, Object>> result= lattice.bestOutputAlignments(1);
-			
+			String name = output.get(output.size()-1).toString();	
 			double weight = result.get(0).getWeight(); //score achieved by running through given output states
-//			weight += model.getState(model.stateIndexOfString(name)).getFinalWeight();	//add in final weight
+
+			weight += model.getState(model.stateIndexOfString(name)).getFinalWeight();	//add in final weight
 			return weight;
 	}
 	/*
@@ -192,13 +215,11 @@ public class VerbTagger {
 	}
 
 	public static void main (String[] args) throws Exception {
-
 		Reader trainingFile = null, testFile = null;
 		InstanceList trainingData = null, testData = null;
 		int numEvaluations = 0;
 		int iterationsBetweenEvals = 16;
 		int restArgs = commandOptions.processOptions(args);
-		//ArrayList<ArraySequence<Transducer.State>> outSeqs = null;
 		ArrayList<ArraySequence<String>> outSeqs = null;
 
 		if (restArgs == args.length) {
@@ -226,30 +247,29 @@ public class VerbTagger {
 			int sentences = 0;
 			while(iter.hasNext()) {	 //find the number of sentences in the data in order to allocate size to outSeqs
 				String str = iter.next().toString();
-				if(str.equals("")) {
+				if(str.equals("") || !iter.hasNext()) { //reached delimiter or end of input
 					sentences += 1;
 				}
 			}
-		//	outSeqs = new ArrayList<ArraySequence<Transducer.State>>(sentences);
 			outSeqs = new ArrayList<ArraySequence<String>>(sentences);
 			if(crf != null) {
 				ListIterator liter = strseq.listIterator();
-			//	ArrayList<Transducer.State> senSeq = new ArrayList<Transducer.State>(); //holds a single sentence
 				ArrayList<String> senSeq = new ArrayList<String>(); //holds a single sentence
 				int senIndex = 0;
 				while(liter.hasNext()) {
 					int index = liter.nextIndex();
 					String sname = liter.next().toString(); //state name
-					if(!sname.equals("")) {  //sentences seperated by "" in data
-						//senSeq.add(crf.getState(crf.stateIndexOfString(sname)));
-						senSeq.add(sname);
-					}
-					else { //end of sentence, add the sequence to outSeqs and clear the sentence array
-					//	Transducer.State[] temp = new Transducer.State[senSeq.size()];
+					if(sname.equals("")) { //end of sentence, add the sequence to outSeqs and clear the sentence array
 						String[] temp = new String[senSeq.size()];
-					//	outSeqs.add(new ArraySequence<Transducer.State>(senSeq.toArray(temp))); //add sentence
 						outSeqs.add(new ArraySequence<String>(senSeq.toArray(temp))); //add sentence
 						senSeq.clear();  
+					}
+					else { //add token to sentence 
+						senSeq.add(sname);
+						if(!liter.hasNext()) { //incase there is no empty line at the end
+							String[] temp = new String[senSeq.size()];
+							outSeqs.add(new ArraySequence<String>(senSeq.toArray(temp))); //add sentence
+						}
 					}
 				}
 			}
@@ -257,7 +277,7 @@ public class VerbTagger {
 				System.err.println("No CRF file"); 		
 			}
 		}
-		
+	
 		if (testOption.value != null) {
 			p.setTargetProcessing(true);
 			testData = new InstanceList(p);
@@ -319,28 +339,37 @@ public class VerbTagger {
 			test(new NoopTransducerTrainer(crf), eval, testData);
 		}
 		else {  //RUN CRF 
-			/*Sequence output = getBestSequence(crf, input);
-				for (int j = 0; j < input.size(); j++) {
-					StringBuffer buf = new StringBuffer();
-					buf.append(output.get(j).toString()).append(" ");
-					if (includeInput) {
-						FeatureVector fv = (FeatureVector)input.get(j);
-						buf.append(fv.toString(true));                
-					}
-					System.out.println(buf.toString());
-				}
-				System.out.println();*/
-
 			boolean includeInput = includeInputOption.value();
 			for (int i = 0; i < testData.size(); i++) {
 				Sequence input = (Sequence)testData.get(i).getData();  
-				Sequence[] outputs = apply(crf, input, nBestOption.value); 
+				Sequence[] outputs;
+				if(outSeqs != null) {
+					outputs = new Sequence[1];
+					ArrayList<SequencePairAlignment<Object, Object>> seqData = getAllSequenceData(crf, input, outSeqs.get(i));
+					SequencePairAlignment<Object, Object> origOut = seqData.get(0);
+					SequencePairAlignment<Object, Object> bestOut = seqData.get(1);
+					if(origOut.output().size() != bestOut.output().size()) {
+						System.err.println("There was an error getting the sequences");
+					}
+					/*	check if the difference between sequence weights is great enough to justify 
+					  making the correction in the text
+					*/
+					if(bestOut.getWeight() - origOut.getWeight() < THRESHOLD) { 
+						outputs[0] = origOut.output();  //no big enough change, make no corrections(use original) 
+			//System.out.println("ORIGINAL");	
+					}
+					else {
+						outputs[0] = bestOut.output(); //make the correction (use best sequence)
+			//	System.out.println("BEST");
+					}
+				}
+				else {
+			//		System.out.println("TESTING");
+					outputs = apply(crf, input, nBestOption.value); 
+				}
+
 				int k = outputs.length;
 				boolean error = false;
-
-				System.out.println("Old weight: " + getSequenceWeight(crf, input, outSeqs.get(i)));
-				System.out.println("New weight: " + getSequenceWeight(crf, input, outputs[0]));
-
 				for (int a = 0; a < k; a++) {
 					if (outputs[a].size() != input.size()) {
 						logger.info("Failed to decode input sequence " + i + ", answer " + a);

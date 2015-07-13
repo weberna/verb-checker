@@ -246,7 +246,7 @@ class Features:
 		fvect.append(governee_token.pos + "governee")
 		fvect.append(governee_tuple[0] + "governeerel")
 		fvect.append(prev_head.pos + "prevhead")	
-#		fvect.append(prev_sen_head.pos + "prevsen")
+		fvect.append(prev_sen_head.pos + "prevsen")
 		fvect.append(str(last_in_sentence(self.instance, self.sentence)) + "lastin")
 		fvect.append(time_adverb(self.instance, self.sentence, False).word + "tadverbright")
 		fvect.append(time_adverb(self.instance, self.sentence, True).word + "tadverbleft")

@@ -49,36 +49,22 @@ def change_vform(lemm, outlabel):
 	@ret: the string form of the changed verb
 	"""
 	#the perl script represents the forms by numbers
-	#in_form = get_label_id(inlabel)
 	if str.strip(outlabel) == 'VBP[auxplural]': 
 		return 'are'
 	elif str.strip(outlabel) == 'VBD[auxplural]':
 		return 'were'
-	elif str.strip(outlabel) == 'VBP[be]':
+	elif lemm == 'be' and str.strip(outlabel) == 'VBP':
 		return 'am'
-	elif str.strip(outlabel) == 'VBZ[be]':
+	elif lemm == 'be' and str.strip(outlabel) == 'VBZ':
 		return 'is'
+	elif lemm == 'be' and str.strip(outlabel) == 'VBD':
+		return 'was'
 	else:
-		out_form = get_label_id2(outlabel)
+		out_form = get_label_id(outlabel)
 		outverb = sub.check_output(["./verbTenseChanger.pl", lemm, '0', str(out_form)])
 		return outverb.decode('utf-8')
 
 def get_label_id(label):
-	"""Return the integer id for the corresponding label that can be given to the perl script"""	
-	if label[2] == '[': #base form
-		return 0
-	elif label[2] == 'D': #past simple tense
-		return 1
-	elif label[2] == 'N': #past participle
-		return 2
-	elif label[2] == 'Z': #3rd person singular
-		return 3
-	elif label[2] == 'G': #present participle
-		return 4
-	else:
-		return 0
-
-def get_label_id2(label):
 	"""Return the integer id for the corresponding label that can be given to the perl script"""	
 	if label == 'VB' or label == 'VB[be]': #base form
 		return 0
