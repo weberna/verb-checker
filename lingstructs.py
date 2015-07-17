@@ -7,6 +7,7 @@
 #Note that this code assumes that xml is in correct format 
 #and that feature extracting assumes that all words have 
 #been lowercased 
+import fst
 
 class Token:
 	'Holds the data for a single token'
@@ -44,28 +45,52 @@ class Token:
 		else:
 			return False
 
-	#these are the labels used for the crf	
-	def get_label(self, subj=None):
-		"""Return the label of the verb token, values are
-			VB*[main], VB*[be], VB*[have], VB*[do], 
-			For all verb types
-			Exception: VBP[plural]
-		"""
+	#verb labels
+	def get_label_new(self, subj=None, subonly=False):
+		"""Return the label of the verb token"""
 		p = self.pos
 		label = ""
-#		if self.lemma == 'be':
-		#	if subj and subj.noun_person() == 'Plural' and (p == 'VBD' or p == 'VBP') or (self.word == 'are') or (self.word == 'were'):
-#			if (self.word == 'are') or (self.word == 'were'):
-#				label = "{}[auxplural]".format(p)
-#			else:
-#				label = "{}[be]".format(p)
-#		elif self.lemma == 'have':
-#			label = "{}[have]".format(p)
-#		elif self.lemma == 'do':
-#			label = "{}[do]".format(p)
-#		else:
-#			label = "{}[main]".format(p)
-#		return label
+		if self.lemma == 'be':
+			if subonly:  #return only subtype
+				label = "be"
+			else:
+				label = "{}[be]".format(p)
+		elif self.lemma == 'have':
+			if subonly:  #return only subtype
+				label = "have"
+			else:
+				label = "{}[have]".format(p)
+		elif self.lemma == 'do':
+			if subonly:  #return only subtype
+				label = "do"
+			else:
+				label = "{}[do]".format(p)
+		else:
+			if subonly:  #return only subtype
+				label = "main"
+			else:
+				label = "{}[main]".format(p)
+		return label
+
+	def isaux(self):
+		"""return True if verb is auxiliary verb"""
+		auxlist = ['be', 'have', 'do']
+		if not self.isverb():
+			return False
+		elif self.lemma in auxlist or self.pos == 'MD':
+			return True
+		else:
+			return False
+
+	def isadverb(self):
+		if self.pos[0] == 'R':
+			return True
+		else:
+			return False
+
+	def get_label(self, subj=None):
+		p=self.pos
+		label=""
 		if self.lemma == 'be':
 			if (self.word == 'are') or (self.word == 'were'):
 				label = "{}[auxplural]".format(p)
@@ -74,9 +99,6 @@ class Token:
 		else:
 			label = self.pos
 		return label
-
-
-		
 
 #note that most token/token property searching methods just return a NullToken object if 
 #no sutiable token/token property could be found
@@ -88,6 +110,38 @@ class NullToken(Token):
 		self.pos = 'None'
 		self.tid = -1
 
+class VChain:
+	'Represents a chain of verb Token objects'
+	def __init__(self, chain, start, end):
+		"""@params:
+				List of Tokens chain
+				int start, end - tid of where the verb chain starts (inclusive),
+								 and where it ends (exclusive)
+		"""
+		self.chain = chain	
+		self.start = start
+		self.end = end
+		self.length = len(self.chain)
+	
+	def length(self):
+		return self.length
+	
+	def range(self):
+		"""Return (start tid, end tid) tuple"""
+		return (self.start, self.end)
+	
+	def fst_sequence(self):
+		"""Return a representation of the verb chain that can be used in the fst"""
+		seq = []
+		for i in self.chain:
+			if i.isaux():
+				seq.append(i.word)
+			elif i.isadverb():
+				seq.append('RB')
+			else:
+				seq.append(i.pos)
+		return seq
+				
 class Dependency:
 	'Holds a dependency relation for tokens in a sentence'
 	def __init__(self, dtype, gov, dependent):
@@ -258,12 +312,15 @@ class Features:
 #------------------------------------------------------------
 #		Various general helping functions
 #-----------------------------------------------------------
-def aux_verb(tok):
-	"""return 1 if verb is auxiliary verb, else return 0"""
-	if tok.vclass() == 'MAIN' or tok.vclass() == 'NONVERB':
-		return False 
+def get_aspect(vseq):
+	"""Find the aspect of a verb chain vseq (represented as a list of Token objects)"""
+	if len([x for x in vseq.chain if (x.isverb() and x.pos != 'MD')]) == 1: #only 1 non model verb
+		aspect = 'SIMPLE'
 	else:
-		return True
+		seq = vseq.fst_sequence()
+		transducer = fst.aspect_transducer()
+		aspect = " ".join(transducer.transduce(seq))
+	return aspect
 
 def last_in_sentence(tok, sentence):
 	index = tok.tid
@@ -417,7 +474,6 @@ class Sentence:
 	def get_token(self, tid): 
 		"""return token given by token id, return None if out of bounds"""
 		if tid > len(self.sen) or tid < 0:
-			#return None
 			return NullToken()
 		if tid == 0:
 			return Token("ROOT", "ROOT", "ROOT", 0)
@@ -513,4 +569,25 @@ class Sentence:
 			if i.dtype == 'det' and i.gov_id() == token_index:
 				return i.dependent_word()
 		return 'None'
+
+	def get_vchains(self):
+		"""Return list of VChain objects for all verb chains in the sentence"""
+		chains = []
+		started = False #whether we have started building chain
+		for tok in self.sen:
+			if not started:
+				poss = []
+			if tok.isverb() or tok.isadverb():
+				started = True
+				poss.append(tok)
+			else:
+				started = False
+				if poss and not (len(poss) == 1 and poss[0].isadverb()): #check for possible chain that is not just a single adverb 
+					chain = VChain(list(poss), poss[0].tid, poss[len(poss)-1].tid)
+					chains.append(chain)
+		return chains
+					
+
 	
+
+

@@ -29,10 +29,16 @@ def vcorrect(infile, seqfile, outfile='corrected.txt'):
 	corrected = ""
 	for s in sents:
 		for tok in s.sen: 
-			if tok.pos[0] == 'V':
+			#handle brackets
+			if tok.word == '-lrb-':
+				tok.word = '('
+			elif tok.word == '-rrb-':
+				tok.word = ')'
+			#change verb form if needed
+			elif tok.pos[0] == 'V':
 				label = seq.pop() #get the form this verb should be
 				tok.word = change_vform(tok.lemma, label) #change the verb form
-		corrected = corrected + s.tostring() #add corrected sentence to text
+		corrected = corrected + s.tostring() + " " #add corrected sentence to text
 	#now write all corrected text
 	corrfile = open(outfile, 'w')
 	corrfile.write(corrected + "\n")

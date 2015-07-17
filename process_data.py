@@ -9,10 +9,11 @@ from lingstructs import *
 import lxml.etree as xml
 import sys
 			
-def read_xml(filename, check=True):
+def read_xml(filename, getdeps=True, check=True):
 	"""Parse the xml output from filename made by the Stanford Core NLP Annotators
 		and extract syntatic and dependecy features 
 		@params: String filename,
+				bool deps - whether to include dependencies
 				bool check - if true, double check if verb is incorrectly tagged as something else 
 		@ret: A list of Sentence objects storing each sentence in the file
 	"""
@@ -35,22 +36,22 @@ def read_xml(filename, check=True):
 			if check and (p[0] == 'N' or p[0] == 'J') and prev_isverb and in_verblist(l):  
 				p = 'VB' 
 				prev_isverb = False #usually we only need to correct the last verb in verbchain
-		#	elif p[0] == 'V' or p == 'MD':
-			elif l == 'be' or l == 'have' or p == 'MD':
+			elif l == 'be' or l == 'have' or p == 'MD':   #tagger usually has problems tagging verbs comming after these 
 				prev_isverb = True
 			else:
 				prev_isverb = False
 			#end check code
 			tok = Token(w, l, p, t)
 			sen_data.add_word(tok)
-		for deps in deptypes:
-			if deps.get("type") == "collapsed-ccprocessed-dependencies":
-				for i in deps: #i is a single dependency relation
-					t = i.get("type")	
-					gov = (i.find("governor").text.lower(), int(i.find("governor").get("idx"))) #note: just added lower()
-					dep = (i.find("dependent").text.lower(), int(i.find("dependent").get("idx")))
-					relation = Dependency(t, gov, dep)
-					sen_data.add_dep(relation)
+		if getdeps:
+			for deps in deptypes:
+				if deps.get("type") == "collapsed-ccprocessed-dependencies":
+					for i in deps: #i is a single dependency relation
+						t = i.get("type")	
+						gov = (i.find("governor").text.lower(), int(i.find("governor").get("idx"))) #note: just added lower()
+						dep = (i.find("dependent").text.lower(), int(i.find("dependent").get("idx")))
+						relation = Dependency(t, gov, dep)
+						sen_data.add_dep(relation)
 		sents.append(sen_data)
 	xfile.close()
 	return sents
@@ -106,7 +107,7 @@ if __name__ == "__main__":
 		if sys.argv[3] == 'nolabels':
 			create_data(sents, outfile, True)
 		else:
-			create_data(sents, outfile, True, sys.argv[3])
+			create_data(sents, outfile, True, sys.argv[3]) #create origianl label file
 	else:
 		create_data(sents, outfile)
 	print("done")

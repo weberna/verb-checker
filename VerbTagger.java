@@ -53,7 +53,7 @@ import cc.mallet.util.MalletLogger;
 
 public class VerbTagger {
 	
-	public static final double THRESHOLD = 1.0;
+	public static final double THRESHOLD = 1.0;  //how much better a answer has to be to change it
 
 	private static Logger logger =
 		MalletLogger.getLogger(VerbTagger.class.getName());
@@ -348,21 +348,39 @@ public class VerbTagger {
 					ArrayList<SequencePairAlignment<Object, Object>> seqData = getAllSequenceData(crf, input, outSeqs.get(i));
 					SequencePairAlignment<Object, Object> origOut = seqData.get(0);
 					SequencePairAlignment<Object, Object> bestOut = seqData.get(1);
+					
+					//REMOVE THIS LATER
+					/*Sequence foo = getBestSequence(crf, input);
+					double w = getSequenceWeight(crf, input, foo);
+					double o = getSequenceWeight(crf, input, outSeqs.get(i));*/
+
+
 					if(origOut.output().size() != bestOut.output().size()) {
 						System.err.println("There was an error getting the sequences");
 					}
 					/*	check if the difference between sequence weights is great enough to justify 
 					  making the correction in the text
-					*/
+					*/ 
+
 					if(bestOut.getWeight() - origOut.getWeight() < THRESHOLD) { 
 						outputs[0] = origOut.output();  //no big enough change, make no corrections(use original) 
-			//System.out.println("ORIGINAL");	
+						//System.out.println("ORIGINAL");	
 					}
 					else {
-						outputs[0] = bestOut.output(); //make the correction (use best sequence)
-			//	System.out.println("BEST");
+						outputs[0] = bestOut.output(); //make the correction (use best sequence) 
+						//	System.out.println("BEST");
 					}
-				}
+					//Using final weights as well
+					/*if(w - o < THRESHOLD) {
+						outputs[0] = origOut.output();
+					}
+					else {
+						outputs[0] = foo;
+					}*/
+
+
+
+				} 
 				else {
 			//		System.out.println("TESTING");
 					outputs = apply(crf, input, nBestOption.value); 
