@@ -9,10 +9,11 @@ import process_data as pd
 import lxml.etree as xml
 import sys
 
-def read_fce_xml(datafile, corrected=True):
+def read_fce_xml(datafile, corrected=True, delimited=False):
 	"""Read the the fce xml file from datafile and return the text data
 		as a string. If corrected is True, return the data with verb errors corrected
 		else return original, possibly incorrect data
+		TODO: Take out delimited options, now has its own method
 	"""
 	sents = []
 	xfile = open(datafile, 'r')
@@ -21,11 +22,47 @@ def read_fce_xml(datafile, corrected=True):
 	strdata = ""
 	if corrected:
 		for p in root.iter('p'):
-			strdata = strdata + get_vcorrected(p) + " "
+			strdata = strdata + get_vcorrected(p, delimited) + " "
 	else:
 		for p in root.iter('p'):
 			strdata = strdata + get_original(p) + " "
 	return strdata
+
+def create_delimited(datafile):
+	"""Create String data for training from fce xml documents"""
+	sents = []
+	xfile = open(datafile, 'r')
+	data = xml.parse(xfile)
+	root = data.getroot()
+	strdata = ""
+	for p in root.iter('p'):
+		strdata = strdata + delimit_data(p) + " "
+	return strdata
+
+def delimit_data(elm):
+	"""Get String data for training (delimit errors with @@ and corrections with $$)"""
+	if elm.tag == 'NS':
+		err = elm.get('type')
+		if err == 'AGV' or (len(err) > 1 and err[1] == 'V' and err[0] != 'M' and err[0] != 'U' and err[0] != 'R'): #for all targeted verb corrs
+			for i in elm:
+				if i.tag == 'i' or i.tag == 'c': 
+					i.set('delimit', 'yes')
+	if elm.text: 
+		if elm.get('delimit') == 'yes' and elm.tag == 'i':  
+			data = ' @@ ' + elm.text + ' @@ '	#delimit verb errors
+		elif elm.get('delimit') == 'yes' and elm.tag == 'c':  
+			data = ' $$ ' + elm.text + ' $$ '	#delimit verb corrections
+		elif elm.tag != 'c':  #add regular data
+			data = elm.text
+		else:   #some weird exception
+			data = ""
+	else: #no text in element
+		data = ""
+	for child in elm:
+		data = data + delimit_data(child)
+	if elm.tail:
+		data = data + elm.tail
+	return data
 
 def get_original(elm):
 	"""Extract the original text data from the element elm
@@ -35,11 +72,7 @@ def get_original(elm):
 			text data represented as a string
 	"""
 	if elm.text and elm.tag != 'c': #get the original text only
-		data = elm.text 
-#		err_type = elm.get('type')
-#		if err_type and (err_type == 'AGV' or (len(err_type) > 1 and err_type[1] == 'V' and err_type[0] != 'M' and err_type[0] != 'U' and err_type[0] != 'R')): #for all verb corrs
-#			if any(s == ' ' for s in elm.text):
-#				data = ""
+		data = elm.text
 	else:
 		data = ""
 	for child in elm:
@@ -48,33 +81,32 @@ def get_original(elm):
 		data = data + elm.tail
 	return data
 
-def get_vcorrected(elm, prev=None):
+
+def get_vcorrected(elm, delimit=False):
 	"""Extract the text data with only verb errors corrected
 		@params:
 			xml.Element elm - element holding the text data
+			delimit - whether or not to delimit verb errors/correction
 		@ret:
 			text data represented as a string
 	"""
 	if elm.text and elm.get('use') != 'no' and (elm.tag != 'c' or elm.get('use') == 'yes'): #attribute mark whether or not we should use correction or original
-		data = elm.text 
+		if delimit and elm.get('use') == 'yes':
+			data = ' @@ ' + elm.text + ' @@ '	#delimit verb errors
+		else:
+			data = elm.text 
 	else:
 		data = ""
 	if elm.tag == 'NS':
-		err_type = elm.get('type')
-		if err_type == 'AGV' or (len(err_type) > 1 and err_type[1] == 'V' and err_type[0] != 'M' and err_type[0] != 'U' and err_type[0] != 'R'): #for all verb corrs
+		err = elm.get('type')
+		if err == 'AGV' or (len(err) > 1 and err[1] == 'V' and err[0] != 'M' and err[0] != 'U' and err[0] != 'R'): #for all verb corrs
 			for i in elm:
-				if i.tag == 'c':
+				if i.tag == 'c':  #mark this element to use 
 					i.set('use', 'yes')
-				#	if any(s == ' ' for s in i.text):
-				#		i.set('use', 'no')
-				#		p = i.getprevious()
-				#		if p is not None and p.tag == 'i':
-				#			p.set('use', 'yes')
-#						i.text = i.text[3:]
-				elif i.tag == 'i':
+				elif i.tag == 'i':  #mark this element to not use
 					i.set('use', 'no')
 	for child in elm:
-		data = data + get_vcorrected(child)
+		data = data + get_vcorrected(child, delimit)
 	if elm.tail:
 		data = data + elm.tail
 	return data
@@ -206,7 +238,7 @@ def evaluate(method_out, gold_out, orig_out):
 		return (None, None)
 
 if __name__ == "__main__":
-	if sys.argv[1] == 'prep':
+	if sys.argv[1] == 'prep': #extract either fce corrected plain text or fce original text
 		infile = sys.argv[2]
 		if len(sys.argv) == 5:
 			gold = sys.argv[3]
@@ -218,6 +250,19 @@ if __name__ == "__main__":
 		orig_file = open(orig, 'w')
 		gold_file.write(read_fce_xml(infile, corrected=True))
 		orig_file.write(read_fce_xml(infile, corrected=False))
+	#Take in a fce xml file and write out two text files, one with original text, and one with delimited text
+	elif sys.argv[1] == 'delimit': 
+		infile = sys.argv[2]
+		if len(sys.argv) == 5:
+			dataout = sys.argv[3]
+			dataout_delim = sys.argv[4]
+		else:
+			dataout = 'dataout'
+			dataout_delim = 'dataout_delimited'
+		data_file = open(dataout, 'w')
+		delim_file = open(dataout_delim, 'w')	
+		data_file.write(read_fce_xml(infile, corrected=False))
+		delim_file.write(create_delimited(infile))
 	else:
 		methodxml = sys.argv[1]	
 		goldxml = sys.argv[2]

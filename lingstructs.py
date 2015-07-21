@@ -11,11 +11,13 @@ import fst
 
 class Token:
 	'Holds the data for a single token'
-	def __init__(self, word, lemma, pos, tid):
+	def __init__(self, word, lemma, pos, tid, start_delim=False, end_delim=False):
 		self.word = word.lower()  #lower() added 
 		self.lemma = lemma
 		self.pos = pos
 		self.tid = tid #token id (ie position in sentence)
+		self.delim_start = start_delim #whether or not this token starts some delimited phrase (ie error corrected phrases from data and such)
+		self.delim_end = end_delim #whether this token ends some delimited phrase
 
 	def singular_noun(self):
 		"""Return whether Token is singular or plural noun"""
@@ -130,15 +132,18 @@ class VChain:
 		"""Return (start tid, end tid) tuple"""
 		return (self.start, self.end)
 	
+	def tostring(self):
+		return " ".join([x.word for x in self.chain])
+	
 	def fst_sequence(self):
 		"""Return a representation of the verb chain that can be used in the fst"""
 		seq = []
 		for i in self.chain:
-			if i.isaux():
+			if i.isaux() and i.pos != 'MD':
 				seq.append(i.word)
-			elif i.isadverb():
-				seq.append('RB')
-			else:
+			#elif i.isadverb():
+			#	seq.append('RB')
+			elif i.isverb() and i.pos != 'MD':
 				seq.append(i.pos)
 		return seq
 				
@@ -313,13 +318,48 @@ class Features:
 #		Various general helping functions
 #-----------------------------------------------------------
 def get_aspect(vseq):
-	"""Find the aspect of a verb chain vseq (represented as a list of Token objects)"""
+	"""Find the aspect of a verb chain vseq (represented as a list of VChain object)"""
 	if len([x for x in vseq.chain if (x.isverb() and x.pos != 'MD')]) == 1: #only 1 non model verb
 		aspect = 'SIMPLE'
 	else:
 		seq = vseq.fst_sequence()
 		transducer = fst.aspect_transducer()
 		aspect = " ".join(transducer.transduce(seq))
+	return aspect
+
+def simple_tense_aspect(vseq):
+	"""Find the tense/aspect (not person/number) of verb phrase in simple naive way without transducer
+		Tense/Aspect labels are:
+		PR = Present, PA = Past
+		PROG = Progressive, PERPROG = Perfect Progressive
+		PER = Perfect, TOINF = To infinitive, SIM = simple
+	"""
+	seq = vseq.chain
+	if seq[0].pos == 'VBD' or seq[0].pos == 'VBN':
+		if not seq[0].isaux() or len(seq) == 1:
+			return 'PA_SIM'
+		elif seq[0].lemma == 'were' or seq[0].lemma == 'was':
+			return 'PA_PROG'
+		elif seq[1].word == 'been':
+			return 'PA_PERPROG'
+		elif seq[0].word == 'had' and seq[1].pos == 'VBN':
+			return 'PA_PER'
+	else:
+		if not seq[0].isaux() or len(seq) == 1:
+			return 'PR_SIM'
+		elif seq[0].lemma == 'be':
+			return 'PR_PROG'
+		elif seq[1].word == 'been':
+			return 'PR_PERPROG'
+		elif seq[0].lemma == 'have' and seq[1].pos == 'VBN':
+			return 'PR_PER'
+		else:
+			return 'WTF'
+		
+
+def generate_aspect(seq):
+	transducer = fst.aspect_generator()
+	aspect = " ".join(transducer.transduce(seq))
 	return aspect
 
 def last_in_sentence(tok, sentence):
