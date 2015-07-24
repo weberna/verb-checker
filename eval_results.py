@@ -51,7 +51,7 @@ def delimit_data(elm):
 		if elm.get('delimit') == 'yes' and elm.tag == 'i':  
 			data = ' @@ ' + elm.text + ' @@ '	#delimit verb errors
 		elif elm.get('delimit') == 'yes' and elm.tag == 'c':  
-			data = ' $$ ' + elm.text + ' $$ '	#delimit verb corrections
+			data = ' ## ' + elm.text + ' ## '	#delimit verb corrections
 		elif elm.tag != 'c':  #add regular data
 			data = elm.text
 		else:   #some weird exception

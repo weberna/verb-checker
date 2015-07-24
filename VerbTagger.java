@@ -147,6 +147,8 @@ public class VerbTagger {
 	*/
 	public static ArrayList<SequencePairAlignment<Object, Object>> getAllSequenceData(Transducer model, Sequence input, Sequence origOut) {
 			ArrayList<SequencePairAlignment<Object, Object>> ret = new ArrayList<SequencePairAlignment<Object, Object>>(2);
+//			System.out.println(input.size());
+//			System.out.println(origOut.size());
 			MaxLatticeDefault bestLattice= 	
 				new MaxLatticeDefault (model, input, null, cacheSizeOption.value());
 			MaxLatticeDefault origLattice= 	
@@ -348,12 +350,16 @@ public class VerbTagger {
 					ArrayList<SequencePairAlignment<Object, Object>> seqData = getAllSequenceData(crf, input, outSeqs.get(i));
 					SequencePairAlignment<Object, Object> origOut = seqData.get(0);
 					SequencePairAlignment<Object, Object> bestOut = seqData.get(1);
-					
+
+					//TESTING
+//					double prob1 = new SumLatticeDefault(crf, input, bestOut.output()).getTotalWeight();	
+//					double prob2 = new SumLatticeDefault(crf, input, origOut.output()).getTotalWeight();	
+//					System.out.println("Best Prob = " + prob1);
+//					System.out.println("Other Prob = " + prob2);
 					//REMOVE THIS LATER
 					/*Sequence foo = getBestSequence(crf, input);
 					double w = getSequenceWeight(crf, input, foo);
 					double o = getSequenceWeight(crf, input, outSeqs.get(i));*/
-
 
 					if(origOut.output().size() != bestOut.output().size()) {
 						System.err.println("There was an error getting the sequences");

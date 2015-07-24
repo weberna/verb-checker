@@ -65,8 +65,8 @@ def aspect_transducer():
 	#          0     1       2       3     4     5       6     7     8        9     10    11    12     13      14      15
 	inputs = ['VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'had', 'have', 'has', 'is', 'am', 'are', 'was', 'were', 'been']
 
-	outputs = ['ERROR', None, 'SIMPLE', 'PAST', '1ST', '3RD', '1ST', '3RD', 'PLURAL', 'PRESENT', 
-			   'SINGULAR', 'PLURAL', 'PAST', 'PERFECT', None, 'PERFECT PROGRESSIVE', 'PROGRESSIVE'] 
+	outputs = ['ERROR', None, 'SIMPLE', 'PA', '1ST', '3RD', '1ST', '3RD', 'PL', 'PR', 
+			   'SING', 'PL', 'PA', 'PER', None, 'PERPROG', 'PROG'] 
 	
 	trans = [[] for x in range(len(outputs))] #init transition table to all zeros
 
@@ -112,6 +112,69 @@ def aspect_transducer():
 
 	trans[14] = [0]*(len(inputs) + 1)
 	trans[14][2] = 15	
+	trans[14][6] = -1
+
+	trans[15] = [0]*(len(inputs) + 1)
+	trans[15][6] = -1
+
+	trans[16] = [0]*(len(inputs) + 1)
+	trans[16][6] = -1
+
+	transducer = Fst(inputs, outputs, trans)				
+	return transducer
+
+def forgiving_aspect_transducer():
+	"""Just like regular aspect transducer but a little more forgiving (ie try to guess the tense/aspect if input is not entirly correct)"""
+	#          0     1       2       3     4     5       6     7     8        9     10    11    12     13      14      15
+	inputs = ['VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'had', 'have', 'has', 'is', 'am', 'are', 'was', 'were', 'been']
+
+	outputs = ['ERROR', None, 'SIMPLE', 'PA', '1ST', '3RD', '1ST', '3RD', 'PL', 'PR', 
+			   'SING', 'PL', 'PA', 'PER', None, 'PERPROG', 'PROG'] 
+	
+	trans = [[] for x in range(len(outputs))] #init transition table to all zeros
+
+	trans[0] = [0]*(len(inputs) + 1)
+	trans[1] = [2, 2, 2, 2, 2, 2, 1, 3, 4, 5, 7, 6, 8, 10, 11, 0, 0]
+	trans[2] = [0]*(len(inputs) + 1)
+	trans[2][6] = -1 
+	trans[3] = [13, 13, 13, 13, 13, 13, 3, 0, 0, 0, 0, 0, 0, 0, 0, 14, 0]
+
+	trans[4] = [0]*(len(inputs) + 1)
+	trans[4][15] = 14
+	trans[4][:6] = [13 for x in range(6)]
+
+	trans[5] = [0]*(len(inputs) + 1)
+	trans[5][15] = 14
+	trans[5][:6] = [13 for x in range(6)]
+
+	trans[6] = [0]*(len(inputs) + 1)
+	trans[6][16] = 9 
+
+	trans[7] = [0]*(len(inputs) + 1)
+	trans[7][16] = 9 
+
+	trans[8] = [0]*(len(inputs) + 1)
+	trans[8][16] = 9 
+
+	trans[9] = [0]*(len(inputs) + 1)
+	trans[9][:6] = [16 for x in range(6)]
+	trans[9][6] = -1 
+
+	trans[10] = [0]*(len(inputs) + 1)
+	trans[10][16] = 12 
+
+	trans[11] = [0]*(len(inputs) + 1)
+	trans[11][16] = 12 
+
+	trans[12] = [0]*(len(inputs) + 1)
+	trans[12][:6] = [16 for x in range(6)]
+	trans[12][6] = -1 
+
+	trans[13] = [0]*(len(inputs) + 1)
+	trans[13][6] = -1
+
+	trans[14] = [0]*(len(inputs) + 1)
+	trans[14][:6] = [15 for x in range(6)]
 	trans[14][6] = -1
 
 	trans[15] = [0]*(len(inputs) + 1)
@@ -189,68 +252,4 @@ def aspect_generator():
 	transducer = Fst(inputs, outputs, trans)				
 	return transducer
 
-
-
-def simple_transducer():
-	"""Transducer that only does tense/aspect"""
-	#          0     1       2       3     4     5       6     7     8        9     10    11    12     13      14      15
-	inputs = ['VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'had', 'have', 'has', 'is', 'am', 'are', 'was', 'were', 'been']
-
-	outputs = ['ERROR', None, 'SIMPLE', 'PAST', '1ST', '3RD', '1ST', '3RD', 'PLURAL', 'PRESENT', 
-			   'SINGULAR', 'PLURAL', 'PAST', 'PERFECT', None, 'PERFECT PROGRESSIVE', 'PROGRESSIVE'] 
-	
-	trans = [[] for x in range(len(outputs))] #init transition table to all zeros
-
-	trans[0] = [0]*(len(inputs) + 1)
-	trans[1] = [2, 2, 2, 2, 2, 2, 1, 3, 4, 5, 7, 6, 8, 10, 11, 0, 0]
-	trans[2] = [0]*(len(inputs) + 1)
-	trans[2][6] = -1 
-	trans[3] = [0, 0, 0, 13, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 14, 0]
-
-	trans[4] = [0]*(len(inputs) + 1)
-	trans[4][15] = 14
-	trans[4][3] = 13
-
-	trans[5] = [0]*(len(inputs) + 1)
-	trans[5][15] = 14
-	trans[5][3] = 13
-
-	trans[6] = [0]*(len(inputs) + 1)
-	trans[6][16] = 9 
-
-	trans[7] = [0]*(len(inputs) + 1)
-	trans[7][16] = 9 
-
-	trans[8] = [0]*(len(inputs) + 1)
-	trans[8][16] = 9 
-
-	trans[9] = [0]*(len(inputs) + 1)
-	trans[9][2] = 16
-	trans[9][6] = -1 
-
-	trans[10] = [0]*(len(inputs) + 1)
-	trans[10][16] = 12 
-
-	trans[11] = [0]*(len(inputs) + 1)
-	trans[11][16] = 12 
-
-	trans[12] = [0]*(len(inputs) + 1)
-	trans[12][2] = 16
-	trans[12][6] = -1 
-
-	trans[13] = [0]*(len(inputs) + 1)
-	trans[13][6] = -1
-
-	trans[14] = [0]*(len(inputs) + 1)
-	trans[14][2] = 15	
-	trans[14][6] = -1
-
-	trans[15] = [0]*(len(inputs) + 1)
-	trans[15][6] = -1
-
-	trans[16] = [0]*(len(inputs) + 1)
-	trans[16][6] = -1
-
-	transducer = Fst(inputs, outputs, trans)				
-	return transducer
 

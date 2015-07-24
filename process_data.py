@@ -59,10 +59,9 @@ def read_xml(filename, getdeps=True, check=True):
 def read_delimited_xml(filename, del_filename, getdeps=True, check=True):
 	"""Read xml with delimiters around verb phrase. Need to process a
 		file without delimiters so the Stanford parser does not get confused by the delimiters.
-		File with delimiters is only tokenized and split by sentences, used to indicate where
-		delimiters should be placed
-		@params: String filename - name of file with non delimited pos tagged data,
-				 String del_filename - name of file with delimited tokenized data
+		File with correction delimiters is should be pos tagged, does not need dep parsing
+		@params: String filename - name of file with non delimited pos tagged data and dependency parse (xml output from Stanford tagger/parser),
+				 String del_filename - name of file with pos tagged data (xml output from Stanford tagger)
    				 bool deps - whether to include dependencies
 				 bool check - if true, double check if verb is incorrectly tagged as something else 
 		@ret: A list of Sentence objects storing each sentence in the file, with delimiters included
@@ -82,37 +81,53 @@ def read_delimited_xml(filename, del_filename, getdeps=True, check=True):
 		sen_data = Sentence()	
 		prev_isverb = False #whether the previous word is a verb
 		delindex = 0
-		in_del_phrase = False #if we are currently in a delimited phrase
+		in_error_phrase = False #if we are currently in a delimited error or correction phrase
+		pairs = [] #list of error/correction pairs
+		error_phrase = []
 		for i in tokens: #get data from single token
 			t = int(i.get("id"))
 			w = i.find("word").text
 			l = i.find("lemma").text
 			p = i.find("POS").text
-			sd = False #start delim
-			ed = False #end delim
+			in_error = False #whether a token is part of error 
 			#make sure verb was not incorrectly tagged as noun or adjective
 			if check and (p[0] == 'N' or p[0] == 'J') and prev_isverb and in_verblist(l):  
 				p = 'VB' 
 				prev_isverb = False #usually we only need to correct the last verb in verbchain
-			elif l == 'be' or l == 'have' or p == 'MD':   #tagger usually has problems tagging verbs comming after these 
+			elif l == 'be' or l == 'have' or p == 'MD': #tagger usually has problems tagging verbs comming after these
 				prev_isverb = True
 			else:
 				prev_isverb = False
 			#end check code
 			if delsen[0][delindex].find("word").text == '@@' and w != '@@': #check for delimited words (errors)
-				if not in_del_phrase:
-					sd = True
-					in_del_phrase = True
-					delindex = delindex + 1
-				else:
-					ed = True
-					in_del_phrase = False
-					delindex = delindex + 1
-#			elif training and delsen[0][delindex].find("word").text == '$$' and w != '$$': #check for delimited words (corrections)
-#NEED TO ADD THIS
-			tok = Token(w, l, p, t, sd, ed)
+				delindex = delindex + 1
+				if not in_error_phrase:
+					in_error = True
+					in_error_phrase = True
+				else:  #if we are in error phrase and see delimiter, it is ending delimiter, add error phrase to CorrectionPair list
+					in_error = False
+					in_error_phrase = False
+					if delsen[0][delindex].find("word").text == '##': #get correction phrase
+						delindex = delindex + 1
+						corr_phrase = []
+						while delsen[0][delindex].find("word").text != '##':  #till end of correction phrase
+							c = delsen[0][delindex]
+							ct = int(c.get("id"))
+							cw = c.find("word").text
+							cl = c.find("lemma").text
+							cp = c.find("POS").text
+							ctok = Token(cw, cl, cp, ct) 
+							corr_phrase.append(ctok)
+							delindex = delindex + 1
+						pairs.append(CorrectionPair(VChain(list(error_phrase)), VChain(list(corr_phrase))))
+						delindex = delindex + 1
+					error_phrase = [] #reset error phrase
+			tok = Token(w, l, p, t, in_error)
 			delindex = delindex + 1
 			sen_data.add_word(tok)
+			if in_error_phrase: 
+				error_phrase.append(tok)
+		sen_data.add_pairs(pairs)
 		if getdeps:
 			for deps in deptypes:
 				if deps.get("type") == "collapsed-ccprocessed-dependencies":
@@ -126,8 +141,6 @@ def read_delimited_xml(filename, del_filename, getdeps=True, check=True):
 	xfile.close()
 	return sents
 
-
-
 def in_verblist(lem):
 	"""Return true if the given lemma is found in the verbnet verb list"""
 	verblist = verbnet.lemmas()
@@ -136,7 +149,7 @@ def in_verblist(lem):
 	else:
 		return False
 
-def create_data(sents, filename='data_mallet.txt', unlabeled=False, labels_file=None):
+def create_model_data(sents, filename='data_mallet.txt', unlabeled=False, labels_file=None):
 	"""Write a data file that can be used for training
 		or testing CRFs in Mallet. The data is written 
 		in the following form:
@@ -148,72 +161,81 @@ def create_data(sents, filename='data_mallet.txt', unlabeled=False, labels_file=
 			list of Sentences sents - the data created from read_xml()
 			string filename - file to write to 
 	"""
-	prev_sen = None
 	outfile = open(filename, 'w')
 	if labels_file:
 		lfile = open(labels_file, 'w')
 	for s in sents:
-		for tok in s.sen:
-			if tok.isverb() and tok.pos != 'MD': 
-				feats = Features(tok, s, prev_sen)
-				if unlabeled:
-					lab = feats.fvect.pop() #get rid of label
-					if labels_file:  #write the label to the seperate label file
-						lfile.write("{}\n".format(lab))	
-				str_feats = " ".join([str(x) for x in feats.fvect])
-				outfile.write("{}\n".format(str_feats))
-#				if last_in_chain(tok, s):   #sequence ends at verb phrase
-#					outfile.write("\n")
-			if tok.word == '.':				#sequence ends at sentence end
-				outfile.write("\n")
-				if labels_file:
-					lfile.write("\n")
-		prev_sen = s
+		corrected = False
+		for chain in s.get_vchains():
+			feats = Features(chain, s)
+			if unlabeled:
+				lab = feats.fvect.pop() #get rid of label
+				if labels_file:  #write the label to the seperate label file
+					lfile.write("{}\n".format(lab))	
+			str_feats = " ".join([str(x) for x in feats.fvect])
+			outfile.write("{}\n".format(str_feats))
+			corrected = True 
+		if corrected:
+			outfile.write("\n")
+			if labels_file:
+				lfile.write("\n")
+	outfile.close()
+
+def create_train_data(sents, filename='data_mallet.txt', unlabeled=False, labels_file=None):
+	"""Write a data file that can be used for training
+		or testing CRFs in Mallet. The data is written 
+		in the following form:
+		Each line represents a verb instance.
+		Every line is written in the standard 
+		Mallet form <feature> <feature> ... <label>
+		where label is the specific verb POS
+		@params:
+			list of Sentences sents - the data created from read_delimited_xml()
+			string filename - file to write to 
+	"""
+	outfile = open(filename, 'w')
+	if labels_file:
+		lfile = open(labels_file, 'w')
+	for s in sents:
+		corrected = False
+		for pair in s.corr_pairs:
+			feats = CorrectionFeatures(pair, s)
+			if unlabeled:
+				lab = feats.fvect.pop() #get rid of label
+				if labels_file:  #write the label to the seperate label file
+					lfile.write("{}\n".format(lab))	
+			str_feats = " ".join([str(x) for x in feats.fvect])
+			outfile.write("{}\n".format(str_feats))
+			corrected = True
+#		if corrected:
+#			outfile.write("\n")
+#			if labels_file:
+#				lfile.write("\n")
 	outfile.close()
 		
 if __name__ == "__main__":	
 	infile = sys.argv[1]
-#	outfile = sys.argv[2]
-#	sents = read_xml(infile)
-#	if len(sys.argv) > 3:
-#		if sys.argv[3] == 'nolabels':
-#			create_data(sents, outfile, True)
+	outfile = sys.argv[2]
+	sents = read_xml(infile)
+	if len(sys.argv) > 3:
+		if sys.argv[3] == 'nolabels':
+			create_model_data(sents, outfile, True)
+		else:
+			create_model_data(sents, outfile, True, sys.argv[3]) #create origianl label file
+	else:
+		create_model_data(sents, outfile)
+	print("done")
+
+#	infile = sys.argv[1]
+#	delfile = sys.argv[2]
+#	outfile = sys.argv[3]
+#	sents = read_delimited_xml(infile, delfile)
+#	if len(sys.argv) > 4:
+#		if sys.argv[4] == 'nolabels':
+#			create_train_data(sents, outfile, True)
 #		else:
-#			create_data(sents, outfile, True, sys.argv[3]) #create origianl label file
+#			create_train_data(sents, outfile, True, sys.argv[3]) #create origianl label file
 #	else:
-#		create_data(sents, outfile)
+#		create_train_data(sents, outfile)
 #	print("done")
-
-#	sents = read_xml(infile)
-#	for s in sents:
-#		chains = s.get_vchains()	
-#		for c in chains:
-#			#print(c.tostring())
-#			print(get_aspect(c))
-	a = generate_aspect(['', 'PAST', 'PERFECT'])
-	b = generate_aspect(['1ST', 'PRESENT', 'PROGRESSIVE'])
-	c = generate_aspect(['PLURAL', 'PAST', 'PROGRESSIVE'])
-	d = generate_aspect(['PLURAL', 'PRESENT', 'PROGRESSIVE'])
-	e = generate_aspect(['3RD', 'PRESENT', 'PROGRESSIVE'])
-	f = generate_aspect(['1ST', '', 'PERFECT PROGRESSIVE'])
-	print(a)
-	print(b)
-	print(c)
-	print(d)
-	print(e)
-	print(f)
-
-	print(get_aspect2(a.split))
-	print(get_aspect2(b.split))
-	print(get_aspect2(c.split))
-	print(get_aspect2(d.split))
-	print(get_aspect2(e.split))
-	print(get_aspect2(f.split))
-	
-
-
-
-
-
-
 

@@ -11,13 +11,12 @@ import fst
 
 class Token:
 	'Holds the data for a single token'
-	def __init__(self, word, lemma, pos, tid, start_delim=False, end_delim=False):
+	def __init__(self, word, lemma, pos, tid, delim=False):
 		self.word = word.lower()  #lower() added 
 		self.lemma = lemma
 		self.pos = pos
 		self.tid = tid #token id (ie position in sentence)
-		self.delim_start = start_delim #whether or not this token starts some delimited phrase (ie error corrected phrases from data and such)
-		self.delim_end = end_delim #whether this token ends some delimited phrase
+		self.in_delim = delim #whether or not this token is in a delimited (error) phrase 
 
 	def singular_noun(self):
 		"""Return whether Token is singular or plural noun"""
@@ -46,9 +45,24 @@ class Token:
 			return True
 		else:
 			return False
+	
+	def abbv_to_word(self):
+		"""Convert abbreviated words (ie 'nt, 've 'd) to there word form"""
+		if self.word == "'m":
+			return 'am'
+		elif self.word == "'ve":
+			return 'have'
+		elif self.word == "'s":
+			return 'is'
+		elif self.word == "'re":
+			return 'are'
+		elif self.word == "'d":
+			return 'would'
+		else:
+			return self.word
 
 	#verb labels
-	def get_label_new(self, subj=None, subonly=False):
+	def get_label_new(self):
 		"""Return the label of the verb token"""
 		p = self.pos
 		label = ""
@@ -76,7 +90,8 @@ class Token:
 
 	def isaux(self):
 		"""return True if verb is auxiliary verb"""
-		auxlist = ['be', 'have', 'do']
+#		auxlist = ['be', 'have', 'do', 'to']
+		auxlist = ['be', 'have']
 		if not self.isverb():
 			return False
 		elif self.lemma in auxlist or self.pos == 'MD':
@@ -90,7 +105,7 @@ class Token:
 		else:
 			return False
 
-	def get_label(self, subj=None):
+	def get_label(self):
 		p=self.pos
 		label=""
 		if self.lemma == 'be':
@@ -114,12 +129,16 @@ class NullToken(Token):
 
 class VChain:
 	'Represents a chain of verb Token objects'
-	def __init__(self, chain, start, end):
+	def __init__(self, chain, start=None, end=None):
 		"""@params:
 				List of Tokens chain
 				int start, end - tid of where the verb chain starts (inclusive),
 								 and where it ends (exclusive)
 		"""
+		if start == None:
+			start = chain[0].tid
+		if end == None:
+			end = chain[len(chain)-1].tid
 		self.chain = chain	
 		self.start = start
 		self.end = end
@@ -135,17 +154,45 @@ class VChain:
 	def tostring(self):
 		return " ".join([x.word for x in self.chain])
 	
+	def first(self):
+		return self.chain[0]
+	
+	def last(self):
+		return self.chain[self.length - 1]
+
+	def head(self):
+		"""Return head of verb chain (return the last verb pretty much)"""
+		found = False
+		for i in self.chain:
+			if i.isverb():
+				found = True
+				head = i
+		if not found:
+			head = self.last()
+		return head
+
 	def fst_sequence(self):
 		"""Return a representation of the verb chain that can be used in the fst"""
 		seq = []
+		other_aux = ['be', 'being', 'having']	
 		for i in self.chain:
 			if i.isaux() and i.pos != 'MD':
-				seq.append(i.word)
+				seq.append(i.abbv_to_word())
 			#elif i.isadverb():
 			#	seq.append('RB')
 			elif i.isverb() and i.pos != 'MD':
 				seq.append(i.pos)
 		return seq
+
+class CorrectionPair:
+	'Represents a error annotated verb phrase and its corresponding correction'
+	def __init__(self, error, corr):
+		"""@params: (VChain) error, corr"""
+		self.error = error
+		self.correction = corr
+	
+	def tostring(self):
+		return "{} -> {}".format(self.error.tostring(), self.correction.tostring())	
 				
 class Dependency:
 	'Holds a dependency relation for tokens in a sentence'
@@ -172,19 +219,18 @@ class Dependency:
 	def dependent_word(self):
 		return self.dependent[0]
 
-class Features:	
-	'Creates and stores features for a verb Token object'
-	def __init__(self, verb, s, ps=None):
+class CorrectionFeatures:	
+	'Creates and stores features for a verb phrase error and correction'
+	def __init__(self, pair, s):
 		"""@params: 
-			Token verb - the instance for which features are stored
+			CorrectionPair pair 	
 			Sentence s - the sentence in which verb appears in 
-			Sentence ps - previous sentence before s
 		"""
 		self.sentence = s
-		self.instance = verb
-		self.fvect = self.create_fvect2(ps) #holds all features
+		self.instance = pair
+		self.fvect = self.create_fvect() #holds all features
 
-	def create_fvect(self, ps=None):	
+	def create_fvect(self):	
 		"""
 			Helping method which creates the final feature vector 
 			for the instance, the feature are currently:
@@ -199,95 +245,29 @@ class Features:
 			lemma/pos/relation of governee of instance
 		"""
 		fvect = []
+		corr = self.instance.correction
+		error = self.instance.error
+
 		#extract data needed for features
-		left_nonverb = closest_nonverb(self.instance, self.sentence, left=True)
-		right_nonverb = closest_nonverb(self.instance, self.sentence, left=False)
 		subj = self.sentence.get_subject_token()[0]
-		left = self.sentence.get_token(self.instance.tid - 1)
-		right = self.sentence.get_token(self.instance.tid + 1)
-		leftnoun = closest_noun(self.instance, self.sentence, True)
-		rightnoun = closest_noun(self.instance, self.sentence, False)
-		gov_tuple = self.sentence.get_gov(self.instance.tid)
+		left = self.sentence.get_token(error.first().tid - 1)
+		right = self.sentence.get_token(error.last().tid + 1)
+		leftnoun = closest_noun(error.first(), self.sentence, True)
+		rightnoun = closest_noun(error.last(), self.sentence, False)
+		gov_tuple = self.sentence.get_gov(error.head().tid)
 		gov_token = self.sentence.get_token(gov_tuple[1])
-		governee_list = self.sentence.get_governees(self.instance.tid)
+		governee_list = self.sentence.get_governees(error.head().tid)
 		governee_tuple = governee_list[0]
 		governee_token = self.sentence.get_token(governee_tuple[1])
-		prev_head = prev_vphrase(self.instance, self.sentence)
-		if ps:
-			prev_sen_head = prev_vphrase(ps.get_token(len(ps.sen) - 1), ps)
-		else:
-			prev_sen_head = NullToken()
+		prev_head = prev_vphrase(error.first(), self.sentence)
 
-
-		fvect.append(self.instance.lemma)
-		fvect.append(right.lemma)
-		fvect.append(left.lemma)
-		fvect.append(subj.word)
-		fvect.append(subj.pos)
-		fvect.append(subj.noun_person())
-		fvect.append(subj.singular_noun())
-		fvect.append(self.sentence.get_det(subj.tid))
-		fvect.append(self.sentence.ispassive())
-		fvect.append(leftnoun.noun_person())
-		fvect.append(rightnoun.noun_person())
-		fvect.append(leftnoun.lemma)
-		fvect.append(leftnoun.pos)
-		fvect.append(rightnoun.lemma)
-		fvect.append(rightnoun.pos)
-		fvect.append(first_in_chain(self.instance, self.sentence)) #is verb first verb in chain
-		fvect.append(last_in_chain(self.instance, self.sentence)) #is verb last verb in chain
-		fvect.append(gov_token.lemma)
-		fvect.append(gov_token.pos)
-		fvect.append(gov_tuple[0])
-		fvect.append(governee_token.lemma)
-		fvect.append(governee_token.pos)
-		fvect.append(governee_tuple[0])
-		fvect.append(prev_head.pos)	
-		fvect.append(prev_sen_head.pos)
-		fvect.append(time_adverb(self.instance, self.sentence, False).word)
-		fvect.append(time_adverb(self.instance, self.sentence, True).word)
-		fvect.append(self.instance.get_label(subj)) #put label of sentence at end
-		return fvect
-
-	def create_fvect2(self, ps=None):	
-		"""
-			Helping method which creates the final feature vector 
-			for the instance, the feature are currently:
-			lemma of instance
-			lemma of word right/left of instance
-			subject of sentence
-			pos/person/det of subject
-			does sentence have passive construct?
-			left/right noun person/lemma/pos
-			is instance first/last in chain?
-			lemma/pos/relation of governor of instance
-			lemma/pos/relation of governee of instance
-		"""
-		fvect = []
-		#extract data needed for features
-		left_nonverb = closest_nonverb(self.instance, self.sentence, left=True)
-		right_nonverb = closest_nonverb(self.instance, self.sentence, left=False)
-		subj = self.sentence.get_subject_token()[0]
-		left = self.sentence.get_token(self.instance.tid - 1)
-		right = self.sentence.get_token(self.instance.tid + 1)
-		leftnoun = closest_noun(self.instance, self.sentence, True)
-		rightnoun = closest_noun(self.instance, self.sentence, False)
-		gov_tuple = self.sentence.get_gov(self.instance.tid)
-		gov_token = self.sentence.get_token(gov_tuple[1])
-		governee_list = self.sentence.get_governees(self.instance.tid)
-		governee_tuple = governee_list[0]
-		governee_token = self.sentence.get_token(governee_tuple[1])
-		prev_head = prev_vphrase(self.instance, self.sentence)
-		if ps:
-			prev_sen_head = prev_vphrase(ps.get_token(len(ps.sen) - 1), ps)
-		else:
-			prev_sen_head = NullToken()
-
-
-		fvect.append(self.instance.lemma + "self")
-		fvect.append(right.lemma + "right")
-		fvect.append(left.lemma + "left")
+		fvect.append(corr.head().word + "self")
+		fvect.append(get_aspect(corr) + "corrAspect")
+		fvect.append(str(corr.length) + "len")
+		fvect.append(right.word + "right")
+		fvect.append(left.word + "left")
 		fvect.append(subj.pos + "subj")
+		fvect.append(subj.lemma + "subjlem")
 		fvect.append(str(subj.noun_person()) + "subj")
 		fvect.append(str(subj.singular_noun()) + "subj")
 		fvect.append(self.sentence.get_det(subj.tid) + "det")
@@ -296,8 +276,6 @@ class Features:
 		fvect.append(str(rightnoun.noun_person()) + "rightn")
 		fvect.append(leftnoun.pos + "leftn")
 		fvect.append(rightnoun.pos + "rightn")
-		fvect.append(str(first_in_chain(self.instance, self.sentence)) + "firstin") #is verb first verb in chain
-		fvect.append(str(last_in_chain(self.instance, self.sentence)) + "lastin") #is verb last verb in chain
 		fvect.append(gov_token.word + "gov")
 		fvect.append(gov_token.pos + "gov")
 		fvect.append(gov_tuple[0] + "govrel")
@@ -305,12 +283,84 @@ class Features:
 		fvect.append(governee_token.pos + "governee")
 		fvect.append(governee_tuple[0] + "governeerel")
 		fvect.append(prev_head.pos + "prevhead")	
-		fvect.append(prev_sen_head.pos + "prevsen")
-		fvect.append(str(last_in_sentence(self.instance, self.sentence)) + "lastin")
-		fvect.append(time_adverb(self.instance, self.sentence, False).word + "tadverbright")
-		fvect.append(time_adverb(self.instance, self.sentence, True).word + "tadverbleft")
-		fvect.append(self.instance.get_label(subj)) #put label of sentence at end
+		fvect.append(time_adverb(error.last(), self.sentence, False).word + "tadverbright")
+		fvect.append(time_adverb(error.first(), self.sentence, True).word + "tadverbleft")
+		if get_aspect(error):
+			fvect.append(get_aspect(error)) #label
+		else:
+			print(error.tostring())
+			fvect.append('ERROR')
 		return fvect
+
+class Features:	
+	'Creates and stores features for a verb Token object'
+	def __init__(self, phrase, s):
+		"""@params: 
+			VChain phrase - the instance for which features are stored
+			Sentence s - the sentence in which verb appears in 
+		"""
+		self.sentence = s
+		self.instance = phrase 
+		self.fvect = self.create_fvect() #holds all features
+
+	def create_fvect(self):	
+		"""
+			Helping method which creates the final feature vector 
+			for the instance, the feature are currently:
+			lemma of instance
+			lemma of word right/left of instance
+			subject of sentence
+			pos/person/det of subject
+			does sentence have passive construct?
+			left/right noun person/lemma/pos
+			is instance first/last in chain?
+			lemma/pos/relation of governor of instance
+			lemma/pos/relation of governee of instance
+		"""
+		fvect = []
+		#extract data needed for features
+		subj = self.sentence.get_subject_token()[0]
+		left = self.sentence.get_token(self.instance.first().tid - 1)
+		right = self.sentence.get_token(self.instance.last().tid + 1)
+		leftnoun = closest_noun(self.instance.first(), self.sentence, True)
+		rightnoun = closest_noun(self.instance.last(), self.sentence, False)
+		gov_tuple = self.sentence.get_gov(self.instance.head().tid)
+		gov_token = self.sentence.get_token(gov_tuple[1])
+		governee_list = self.sentence.get_governees(self.instance.head().tid)
+		governee_tuple = governee_list[0]
+		governee_token = self.sentence.get_token(governee_tuple[1])
+		prev_head = prev_vphrase(self.instance.first(), self.sentence)
+
+		fvect.append(self.instance.head().word + "self")
+		fvect.append(str(self.instance.length) + "len")
+		fvect.append(right.word + "right")
+		fvect.append(left.word + "left")
+		fvect.append(subj.pos + "subj")
+		fvect.append(subj.lemma + "subjlem")
+		fvect.append(str(subj.noun_person()) + "subj")
+		fvect.append(str(subj.singular_noun()) + "subj")
+		fvect.append(self.sentence.get_det(subj.tid) + "det")
+		fvect.append(str(self.sentence.ispassive()) + "passive")
+		fvect.append(str(leftnoun.noun_person()) + "leftn")
+		fvect.append(str(rightnoun.noun_person()) + "rightn")
+		fvect.append(leftnoun.pos + "leftn")
+		fvect.append(rightnoun.pos + "rightn")
+		fvect.append(gov_token.word + "gov")
+		fvect.append(gov_token.pos + "gov")
+		fvect.append(gov_tuple[0] + "govrel")
+		fvect.append(governee_token.word + "governee")
+		fvect.append(governee_token.pos + "governee")
+		fvect.append(governee_tuple[0] + "governeerel")
+		fvect.append(prev_head.pos + "prevhead")	
+		fvect.append(time_adverb(self.instance.last(), self.sentence, False).word + "tadverbright")
+		fvect.append(time_adverb(self.instance.first(), self.sentence, True).word + "tadverbleft")
+		if get_aspect(self.instance):
+			fvect.append(get_aspect(self.instance)) #label
+		else:
+			print(self.instance.tostring())
+			fvect.append('ERROR')
+		return fvect
+
 
 
 
@@ -319,43 +369,23 @@ class Features:
 #-----------------------------------------------------------
 def get_aspect(vseq):
 	"""Find the aspect of a verb chain vseq (represented as a list of VChain object)"""
-	if len([x for x in vseq.chain if (x.isverb() and x.pos != 'MD')]) == 1: #only 1 non model verb
-		aspect = 'SIMPLE'
+	filtered = [x for x in vseq.chain if (x.isverb() and x.pos != 'MD')]
+	if vseq.first().pos == 'TO' and vseq.length > 1:
+		aspect = 'INF'
+	elif len(filtered) == 1: #only 1 non model verb
+		if filtered[0].pos == 'VBD' or filtered[0].pos == 'VBN':	
+			aspect = 'PA_SIMPLE'
+		else:
+			aspect = 'PR_SIMPLE'
 	else:
 		seq = vseq.fst_sequence()
-		transducer = fst.aspect_transducer()
-		aspect = " ".join(transducer.transduce(seq))
-	return aspect
-
-def simple_tense_aspect(vseq):
-	"""Find the tense/aspect (not person/number) of verb phrase in simple naive way without transducer
-		Tense/Aspect labels are:
-		PR = Present, PA = Past
-		PROG = Progressive, PERPROG = Perfect Progressive
-		PER = Perfect, TOINF = To infinitive, SIM = simple
-	"""
-	seq = vseq.chain
-	if seq[0].pos == 'VBD' or seq[0].pos == 'VBN':
-		if not seq[0].isaux() or len(seq) == 1:
-			return 'PA_SIM'
-		elif seq[0].lemma == 'were' or seq[0].lemma == 'was':
-			return 'PA_PROG'
-		elif seq[1].word == 'been':
-			return 'PA_PERPROG'
-		elif seq[0].word == 'had' and seq[1].pos == 'VBN':
-			return 'PA_PER'
-	else:
-		if not seq[0].isaux() or len(seq) == 1:
-			return 'PR_SIM'
-		elif seq[0].lemma == 'be':
-			return 'PR_PROG'
-		elif seq[1].word == 'been':
-			return 'PR_PERPROG'
-		elif seq[0].lemma == 'have' and seq[1].pos == 'VBN':
-			return 'PR_PER'
+		transducer = fst.forgiving_aspect_transducer()
+		aspect_list = transducer.transduce(seq)
+		if 'ERROR' in aspect_list:
+			aspect = 'ERROR'
 		else:
-			return 'WTF'
-		
+			aspect = "_".join(aspect_list)
+	return aspect
 
 def generate_aspect(seq):
 	transducer = fst.aspect_generator()
@@ -395,7 +425,6 @@ def time_adverb(tok, sentence, left=False):
 					index = index + 1
 
 		return NullToken() #return null if no time adverb in sentence
-
 	
 def prev_vphrase(tok, sentence):
 	"""return the token that starts the previous verb phrase in the sentence"""
@@ -503,13 +532,16 @@ class NullFeatures(Features): #do not really need this
 
 class Sentence:
 	'Holds the data for a instance of a sentence parsed from the xml output of Core NLP'
-	def __init__(self, s=None, d=None ):
+	def __init__(self, s=None, d=None, pairs=None ):
 		if not s:
 			s = []
 		if not d:
 			d = []
+		if not pairs:
+			pairs = []
 		self.sen = s #sentence is a list of tokens
 		self.deps = d #the dependency relations of sentence, a list of Dependency objects
+		self.corr_pairs = pairs
 	
 	def get_token(self, tid): 
 		"""return token given by token id, return None if out of bounds"""
@@ -609,6 +641,21 @@ class Sentence:
 			if i.dtype == 'det' and i.gov_id() == token_index:
 				return i.dependent_word()
 		return 'None'
+	
+	def add_pair(self, pair):
+		"""Add a correction pair to the sentence's corr_pairs list
+			@params: CorrectionPair pair
+		"""
+		self.corr_pairs.append(pair)
+	
+	def add_pairs(self, pairs):
+		"""Like add_pair but adds a list of CorrectionPairs to corr_pairs"""
+		self.corr_pairs = self.corr_pairs + pairs
+	
+	def print_pairs(self):
+		"""Print correction pairs of sentence"""
+		for i in self.corr_pairs:
+			print(i.tostring())
 
 	def get_vchains(self):
 		"""Return list of VChain objects for all verb chains in the sentence"""
@@ -616,15 +663,18 @@ class Sentence:
 		started = False #whether we have started building chain
 		for tok in self.sen:
 			if not started:
-				poss = []
-			if tok.isverb() or tok.isadverb():
+				poss = []  #possible chain
+			if tok.isverb() or tok.isadverb() or ((not started) and tok.word == 'to' and self.get_token(tok.tid + 1).isverb()): #only accept 'to' if at start of chain 
 				started = True
 				poss.append(tok)
 			else:
 				started = False
-				if poss and not (len(poss) == 1 and poss[0].isadverb()): #check for possible chain that is not just a single adverb 
+				if poss and not (len(poss) == 1 and (poss[0].isadverb() or poss[0].pos == 'TO')): #check for possible chain that is not just a single adverb 
 					chain = VChain(list(poss), poss[0].tid, poss[len(poss)-1].tid)
 					chains.append(chain)
+				if tok.pos == 'TO' and self.get_token(tok.tid + 1).isverb(): #if current token is 'to' add it to the start of new chain
+					poss = [tok]
+					started = True
 		return chains
 					
 
