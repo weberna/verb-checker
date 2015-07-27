@@ -13,6 +13,8 @@ class Fst:
 											the jth element in this list gives the index of the state to transition 
 											to when the jth input symbol is read in, the last element is the 'empty' transistion
 											(can automatically transition with no input required, put 0 to indicate no 'empty' transition)
+											Transitioning to state -1 indicates a state is transitioning to itself and that nothing should
+											be outputted on this transition.
 		"""
 		self.inputs = input_alpha
 		self.outputs = state_outputs
@@ -62,7 +64,7 @@ class Fst:
 
 def aspect_transducer():
 	"""Return a transducer that takes in inputs of auxiliary verbs and form of main verb and outputs tense/aspect"""
-	#          0     1       2       3     4     5       6     7     8        9     10    11    12     13      14      15
+	#          0     1       2       3     4     5       6     7     8        9     10    11    12     13      14      15      
 	inputs = ['VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'had', 'have', 'has', 'is', 'am', 'are', 'was', 'were', 'been']
 
 	outputs = ['ERROR', None, 'SIMPLE', 'PA', '1ST', '3RD', '1ST', '3RD', 'PL', 'PR', 
@@ -125,19 +127,19 @@ def aspect_transducer():
 
 def forgiving_aspect_transducer():
 	"""Just like regular aspect transducer but a little more forgiving (ie try to guess the tense/aspect if input is not entirly correct)"""
-	#          0     1       2       3     4     5       6     7     8        9     10    11    12     13      14      15
-	inputs = ['VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'had', 'have', 'has', 'is', 'am', 'are', 'was', 'were', 'been']
+	#          0     1       2       3     4     5       6     7     8        9     10    11    12     13      14      15     16    17     18
+	inputs = ['VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'had', 'have', 'has', 'is', 'am', 'are', 'was', 'were', 'been', 'do', 'did', 'does']
 
 	outputs = ['ERROR', None, 'SIMPLE', 'PA', '1ST', '3RD', '1ST', '3RD', 'PL', 'PR', 
-			   'SING', 'PL', 'PA', 'PER', None, 'PERPROG', 'PROG'] 
+			   'SING', 'PL', 'PA', 'PER', None, 'PERPROG', 'PROG', 'PR', 'PA', 'PROG', 'DID'] 
 	
 	trans = [[] for x in range(len(outputs))] #init transition table to all zeros
 
 	trans[0] = [0]*(len(inputs) + 1)
-	trans[1] = [2, 2, 2, 2, 2, 2, 1, 3, 4, 5, 7, 6, 8, 10, 11, 0, 0]
+	trans[1] = [2, 2, 2, 2, 2, 2, 1, 3, 4, 5, 7, 6, 8, 10, 11, 0, 17, 18, 19, 0]
 	trans[2] = [0]*(len(inputs) + 1)
 	trans[2][6] = -1 
-	trans[3] = [13, 13, 13, 13, 13, 13, 3, 0, 0, 0, 0, 0, 0, 0, 0, 14, 0]
+	trans[3] = [13, 13, 13, 13, 13, 13, 3, 0, 0, 0, 0, 0, 0, 0, 0, 14, 0, 0, 0, 0]
 
 	trans[4] = [0]*(len(inputs) + 1)
 	trans[4][15] = 14
@@ -148,23 +150,23 @@ def forgiving_aspect_transducer():
 	trans[5][:6] = [13 for x in range(6)]
 
 	trans[6] = [0]*(len(inputs) + 1)
-	trans[6][16] = 9 
+	trans[6][len(inputs)] = 9 
 
 	trans[7] = [0]*(len(inputs) + 1)
-	trans[7][16] = 9 
+	trans[7][len(inputs)] = 9 
 
 	trans[8] = [0]*(len(inputs) + 1)
-	trans[8][16] = 9 
+	trans[8][len(inputs)] = 9 
 
 	trans[9] = [0]*(len(inputs) + 1)
 	trans[9][:6] = [16 for x in range(6)]
 	trans[9][6] = -1 
 
 	trans[10] = [0]*(len(inputs) + 1)
-	trans[10][16] = 12 
+	trans[10][len(inputs)] = 12 
 
 	trans[11] = [0]*(len(inputs) + 1)
-	trans[11][16] = 12 
+	trans[11][len(inputs)] = 12 
 
 	trans[12] = [0]*(len(inputs) + 1)
 	trans[12][:6] = [16 for x in range(6)]
@@ -182,6 +184,21 @@ def forgiving_aspect_transducer():
 
 	trans[16] = [0]*(len(inputs) + 1)
 	trans[16][6] = -1
+
+	trans[17] = [0]*(len(inputs) + 1)
+	trans[17][:6] = [20 for x in range(6)]
+	trans[17][6] = -1
+
+	trans[18] = [0]*(len(inputs) + 1)
+	trans[18][:6] = [20 for x in range(6)]
+	trans[18][6] = -1
+
+	trans[19] = [0]*(len(inputs) + 1)
+	trans[19][:6] = [20 for x in range(6)]
+	trans[19][6] = -1
+
+	trans[20] = [0]*(len(inputs) + 1)
+	trans[20][6] = -1
 
 	transducer = Fst(inputs, outputs, trans)				
 	return transducer

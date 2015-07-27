@@ -90,8 +90,7 @@ class Token:
 
 	def isaux(self):
 		"""return True if verb is auxiliary verb"""
-#		auxlist = ['be', 'have', 'do', 'to']
-		auxlist = ['be', 'have']
+		auxlist = ['be', 'have', 'do']
 		if not self.isverb():
 			return False
 		elif self.lemma in auxlist or self.pos == 'MD':
@@ -174,18 +173,16 @@ class VChain:
 	def fst_sequence(self):
 		"""Return a representation of the verb chain that can be used in the fst"""
 		seq = []
-		other_aux = ['be', 'being', 'having']	
+		other_aux = ['be', 'being', 'having', 'doing']	
 		for i in self.chain:
-			if i.isaux() and i.pos != 'MD':
+			if i.isaux() and i.pos != 'MD' and (i not in other_aux):
 				seq.append(i.abbv_to_word())
-			#elif i.isadverb():
-			#	seq.append('RB')
-			elif i.isverb() and i.pos != 'MD':
+			elif (not i.isadverb() or (i in other_aux) or i.tid == self.head().tid) and i.pos != 'MD':
 				seq.append(i.pos)
 		return seq
 
 class CorrectionPair:
-	'Represents a error annotated verb phrase and its corresponding correction'
+	'Represents a error annotated verb phrase and its corresponding correction (for P(O|C,S))'
 	def __init__(self, error, corr):
 		"""@params: (VChain) error, corr"""
 		self.error = error
@@ -220,7 +217,7 @@ class Dependency:
 		return self.dependent[0]
 
 class CorrectionFeatures:	
-	'Creates and stores features for a verb phrase error and correction'
+	'Creates and stores features for a verb phrase error and correction (for the P(O | C, S) part of model)'
 	def __init__(self, pair, s):
 		"""@params: 
 			CorrectionPair pair 	
@@ -261,8 +258,8 @@ class CorrectionFeatures:
 		governee_token = self.sentence.get_token(governee_tuple[1])
 		prev_head = prev_vphrase(error.first(), self.sentence)
 
-		fvect.append(corr.head().word + "self")
 		fvect.append(get_aspect(corr) + "corrAspect")
+		fvect.append(corr.head().word + "self")
 		fvect.append(str(corr.length) + "len")
 		fvect.append(right.word + "right")
 		fvect.append(left.word + "left")
@@ -287,13 +284,16 @@ class CorrectionFeatures:
 		fvect.append(time_adverb(error.first(), self.sentence, True).word + "tadverbleft")
 		if get_aspect(error):
 			fvect.append(get_aspect(error)) #label
+			if get_aspect(error) == 'ERROR':
+				print('{} Trasnducer error'.format(error.fst_sequence()))	
 		else:
-			print(error.tostring())
 			fvect.append('ERROR')
+			print('{} No transducer out label'.format(error.fst_sequence()))	
+
 		return fvect
 
 class Features:	
-	'Creates and stores features for a verb Token object'
+	'Creates and stores features for a normal Verb Chain object (for P(C|S))'
 	def __init__(self, phrase, s):
 		"""@params: 
 			VChain phrase - the instance for which features are stored
@@ -354,21 +354,21 @@ class Features:
 		fvect.append(prev_head.pos + "prevhead")	
 		fvect.append(time_adverb(self.instance.last(), self.sentence, False).word + "tadverbright")
 		fvect.append(time_adverb(self.instance.first(), self.sentence, True).word + "tadverbleft")
+
 		if get_aspect(self.instance):
 			fvect.append(get_aspect(self.instance)) #label
+			if get_aspect(self.instance) == 'ERROR':
+				print('{} {}'.format(self.instance.fst_sequence(), self.instance.tostring()))	
 		else:
-			print(self.instance.tostring())
+			print('{} {}'.format(self.instance.fst_sequence(), self.instance.tostring()))
 			fvect.append('ERROR')
 		return fvect
-
-
-
 
 #------------------------------------------------------------
 #		Various general helping functions
 #-----------------------------------------------------------
 def get_aspect(vseq):
-	"""Find the aspect of a verb chain vseq (represented as a list of VChain object)"""
+	"""Find the aspect of a verb chain vseq (represented as VChain object)"""
 	filtered = [x for x in vseq.chain if (x.isverb() and x.pos != 'MD')]
 	if vseq.first().pos == 'TO' and vseq.length > 1:
 		aspect = 'INF'
@@ -656,6 +656,12 @@ class Sentence:
 		"""Print correction pairs of sentence"""
 		for i in self.corr_pairs:
 			print(i.tostring())
+	
+	def isdelimited(self):
+		if self.corr_pairs:
+			return True
+		else:
+			return False
 
 	def get_vchains(self):
 		"""Return list of VChain objects for all verb chains in the sentence"""
@@ -669,7 +675,8 @@ class Sentence:
 				poss.append(tok)
 			else:
 				started = False
-				if poss and not (len(poss) == 1 and (poss[0].isadverb() or poss[0].pos == 'TO')): #check for possible chain that is not just a single adverb 
+				#check for possible chain that is not just a single adverb, a 'to' or single modal
+				if poss and not (len(poss) == 1 and (poss[0].isadverb() or poss[0].pos == 'TO' or poss[0].pos == 'MD')): 
 					chain = VChain(list(poss), poss[0].tid, poss[len(poss)-1].tid)
 					chains.append(chain)
 				if tok.pos == 'TO' and self.get_token(tok.tid + 1).isverb(): #if current token is 'to' add it to the start of new chain

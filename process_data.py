@@ -149,14 +149,50 @@ def in_verblist(lem):
 	else:
 		return False
 
-def create_model_data(sents, filename='data_mallet.txt', unlabeled=False, labels_file=None):
-	"""Write a data file that can be used for training
-		or testing CRFs in Mallet. The data is written 
+def create_instance_data(sents, filename='data_mallet.txt',  labels_file=None, corrs=False):
+	"""Write a instance file in a form that can be read by Mallet's Csv2Vectors script (this converts
+		the data into binary form for Mallet's classifiers)
+		Data form:
+			<instance name> <label> <feature> ...
+		@params:
+			list of Sentences sents - the data created from read_xml() or read_delimited_xml()
+			string filename - file to write to 
+			labels_file - Whether to print the labels to a seperate file (rather than including them in instance file)
+			corrs - whether to use CorrectionFeatures (P(O | C, S))
+	"""
+	outfile = open(filename, 'w')
+	if labels_file:
+		lfile = open(labels_file, 'w')
+	name = 0 #for instance names just give unique number starting at 0
+	for s in sents:
+		if corrs:
+			for pair in s.corr_pairs:
+				feats = CorrectionFeatures(pair, s)
+				label = feats.fvect.pop() #get rid of label
+				if label != 'ERROR' and feats.fvect[:5] != 'ERROR': #for now, ignore data to malformed to get all features for
+					if labels_file:  #write the label to the seperate label file
+						lfile.write("{}\n".format(label))	
+					str_feats = " ".join([str(x) for x in feats.fvect])
+					outfile.write("{} {} {}\n".format(name, label, str_feats))
+					name = name + 1
+		else:		
+			for chain in s.get_vchains():
+				feats = Features(chain, s)
+				label = feats.fvect.pop() 
+				if label != 'ERROR': #for now, ignore data to malformed to get all features for
+					if labels_file:  #write the label to the seperate label file
+						lfile.write("{}\n".format(label))	
+					str_feats = " ".join([str(x) for x in feats.fvect])
+					outfile.write("{} {} {}\n".format(name, label, str_feats))
+					name = name + 1
+	outfile.close()
+
+
+def create_crf_data(sents, filename='data_mallet.txt', unlabeled=False, labels_file=None, corrs=False):
+	"""Write a data file that can be used for training or testing CRFs in Mallet. The data is written 
 		in the following form:
-		Each line represents a verb instance.
-		Every line is written in the standard 
-		Mallet form <feature> <feature> ... <label>
-		where label is the specific verb POS
+		<feature> <feature> ... <label>
+		A newline seperates different sequences
 		@params:
 			list of Sentences sents - the data created from read_xml()
 			string filename - file to write to 
@@ -166,76 +202,45 @@ def create_model_data(sents, filename='data_mallet.txt', unlabeled=False, labels
 		lfile = open(labels_file, 'w')
 	for s in sents:
 		corrected = False
-		for chain in s.get_vchains():
-			feats = Features(chain, s)
-			if unlabeled:
-				lab = feats.fvect.pop() #get rid of label
-				if labels_file:  #write the label to the seperate label file
-					lfile.write("{}\n".format(lab))	
-			str_feats = " ".join([str(x) for x in feats.fvect])
-			outfile.write("{}\n".format(str_feats))
-			corrected = True 
+		if corrs:
+			for pair in s.corr_pairs:
+				feats = CorrectionFeatures(pair, s)
+				if unlabeled:
+					lab = feats.fvect.pop() #get rid of label
+					if labels_file:  #write the label to the seperate label file
+						lfile.write("{}\n".format(lab))	
+				str_feats = " ".join([str(x) for x in feats.fvect])
+				outfile.write("{}\n".format(str_feats))
+				corrected = True
+		else:
+			for chain in s.get_vchains():
+				feats = Features(chain, s)
+				if feats.fvect[len(feats.fvect) - 1] != 'ERROR':
+					if unlabeled:
+						lab = feats.fvect.pop() #get rid of label
+						if labels_file:  #write the label to the seperate label file
+							lfile.write("{}\n".format(lab))	
+					str_feats = " ".join([str(x) for x in feats.fvect])
+					outfile.write("{}\n".format(str_feats))
+					corrected = True 
 		if corrected:
 			outfile.write("\n")
 			if labels_file:
 				lfile.write("\n")
 	outfile.close()
 
-def create_train_data(sents, filename='data_mallet.txt', unlabeled=False, labels_file=None):
-	"""Write a data file that can be used for training
-		or testing CRFs in Mallet. The data is written 
-		in the following form:
-		Each line represents a verb instance.
-		Every line is written in the standard 
-		Mallet form <feature> <feature> ... <label>
-		where label is the specific verb POS
-		@params:
-			list of Sentences sents - the data created from read_delimited_xml()
-			string filename - file to write to 
-	"""
-	outfile = open(filename, 'w')
-	if labels_file:
-		lfile = open(labels_file, 'w')
-	for s in sents:
-		corrected = False
-		for pair in s.corr_pairs:
-			feats = CorrectionFeatures(pair, s)
-			if unlabeled:
-				lab = feats.fvect.pop() #get rid of label
-				if labels_file:  #write the label to the seperate label file
-					lfile.write("{}\n".format(lab))	
-			str_feats = " ".join([str(x) for x in feats.fvect])
-			outfile.write("{}\n".format(str_feats))
-			corrected = True
-#		if corrected:
-#			outfile.write("\n")
-#			if labels_file:
-#				lfile.write("\n")
-	outfile.close()
-		
 if __name__ == "__main__":	
 	infile = sys.argv[1]
-	outfile = sys.argv[2]
-	sents = read_xml(infile)
-	if len(sys.argv) > 3:
-		if sys.argv[3] == 'nolabels':
-			create_model_data(sents, outfile, True)
-		else:
-			create_model_data(sents, outfile, True, sys.argv[3]) #create origianl label file
-	else:
-		create_model_data(sents, outfile)
-	print("done")
+	delimfile = sys.argv[2]
+	outfile = sys.argv[3]
+#	sents = read_xml(infile)
+	sents = read_delimited_xml(infile, delimfile)
 
-#	infile = sys.argv[1]
-#	delfile = sys.argv[2]
-#	outfile = sys.argv[3]
-#	sents = read_delimited_xml(infile, delfile)
-#	if len(sys.argv) > 4:
-#		if sys.argv[4] == 'nolabels':
-#			create_train_data(sents, outfile, True)
-#		else:
-#			create_train_data(sents, outfile, True, sys.argv[3]) #create origianl label file
+#	if len(sys.argv) > 3:
+#		#create_instance_data(sents, outfile, sys.argv[3]) #create origianl label file
+#		create_instance_data(sents, outfile, sys.argv[3], True) #create origianl label file
 #	else:
-#		create_train_data(sents, outfile)
-#	print("done")
+		#create_instance_data(sents, outfile)
 
+	create_instance_data(sents, outfile, None, True)
+	print("done")
