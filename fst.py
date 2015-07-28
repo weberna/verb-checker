@@ -1,25 +1,30 @@
 #A simple finite state transducer class
 
 class Fst:
-	'Finite state transducer - assume state 1 is start state and 0 is "error" state'
+	'Finite state transducer (output upon reaching state) - assume state 1 is start state and 0 is "dead" state'
 	#A transistion to state -1 indicates 'Do Nothing'
-	def __init__(self, input_alpha, state_outputs, transitions):
+	def __init__(self, input_alpha, state_outputs, transitions, end_states=None):
 		"""@params:
 				list input_alpha - list of symbols that can be used as input (note order does matter, 
-								   the ith symbol in list is ith column in transition table
+								   the ith symbol in list is ith column in transition table)
 				list state_outputs - the ith element in this list gives what is outputted when ith state is
-									 transitioned to (use None for no output)
-				list of lists transitions - ith element of the list gives a list of transitions for the ith state, 
-											the jth element in this list gives the index of the state to transition 
-											to when the jth input symbol is read in, the last element is the 'empty' transistion
-											(can automatically transition with no input required, put 0 to indicate no 'empty' transition)
-											Transitioning to state -1 indicates a state is transitioning to itself and that nothing should
-											be outputted on this transition.
+									 transitioned to (use None for no output), outputs correspond to states
+				list of lists transitions - ith row of the 2d array gives a list of transitions for the ith state, 
+										the jth element in this list gives the index of the state to transition 
+										to when the jth input symbol is read in, the last element is the 'empty' transistion
+										(can automatically transition with no input required, put 0 to indicate no 'empty' transition)
+										Transitioning to state -1 indicates a state is transitioning to itself and that nothing should
+										be outputted on this transition.
+				list end_states - a list a state indices that are valid ending states, default to all states
 		"""
 		self.inputs = input_alpha
 		self.outputs = state_outputs
 		self.trans = transitions
 		self.curr_state = 1
+		if end_states:
+			self.end_states = end_states
+		else:
+			self.end_states = [x for x in range(1, len(self.outputs))]
 
 	def has_empty_trans(self, state):
 		"""return true is given state has a empty transistion"""
@@ -52,15 +57,20 @@ class Fst:
 		out = []
 		for i in symbols:
 			if i not in self.inputs:
-				print("{} is not a valid input symbol".format(i))
-				return out 
+#				print("{} {} {} is not a valid input symbol".format(i, out, symbols))
+				#return out 
+				return ['ERROR']
 			else:
 				input_index = self.inputs.index(i)
 				out = out + self.transition(input_index)
 
 			if self.curr_state == 0: #reached error state
 				return out
-		return out
+
+		if self.curr_state in self.end_states:
+			return out
+		else:
+			return ['ERROR']
 
 def aspect_transducer():
 	"""Return a transducer that takes in inputs of auxiliary verbs and form of main verb and outputs tense/aspect"""
@@ -133,6 +143,7 @@ def forgiving_aspect_transducer():
 	outputs = ['ERROR', None, 'SIMPLE', 'PA', '1ST', '3RD', '1ST', '3RD', 'PL', 'PR', 
 			   'SING', 'PL', 'PA', 'PER', None, 'PERPROG', 'PROG', 'PR', 'PA', 'PROG', 'DID'] 
 	
+	ends = [2, 13, 15, 16, 20]
 	trans = [[] for x in range(len(outputs))] #init transition table to all zeros
 
 	trans[0] = [0]*(len(inputs) + 1)
@@ -200,7 +211,7 @@ def forgiving_aspect_transducer():
 	trans[20] = [0]*(len(inputs) + 1)
 	trans[20][6] = -1
 
-	transducer = Fst(inputs, outputs, trans)				
+	transducer = Fst(inputs, outputs, trans, ends)				
 	return transducer
 
 def aspect_generator():

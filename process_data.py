@@ -8,6 +8,7 @@ from nltk.corpus import verbnet
 from lingstructs import *
 import lxml.etree as xml
 import sys
+import pickle
 			
 def read_xml(filename, getdeps=True, check=True):
 	"""Parse the xml output from filename made by the Stanford Core NLP Annotators
@@ -170,21 +171,25 @@ def create_instance_data(sents, filename='data_mallet.txt',  labels_file=None, c
 				feats = CorrectionFeatures(pair, s)
 				label = feats.fvect.pop() #get rid of label
 				if label != 'ERROR' and feats.fvect[:5] != 'ERROR': #for now, ignore data to malformed to get all features for
+					str_feats = " ".join([str(x) for x in feats.fvect])
 					if labels_file:  #write the label to the seperate label file
 						lfile.write("{}\n".format(label))	
-					str_feats = " ".join([str(x) for x in feats.fvect])
-					outfile.write("{} {} {}\n".format(name, label, str_feats))
-					name = name + 1
+						outfile.write("{}\n".format(str_feats))
+					else:
+						outfile.write("{} {} {}\n".format(name, label, str_feats))
+						name = name + 1
 		else:		
 			for chain in s.get_vchains():
 				feats = Features(chain, s)
 				label = feats.fvect.pop() 
 				if label != 'ERROR': #for now, ignore data to malformed to get all features for
+					str_feats = " ".join([str(x) for x in feats.fvect])
 					if labels_file:  #write the label to the seperate label file
 						lfile.write("{}\n".format(label))	
-					str_feats = " ".join([str(x) for x in feats.fvect])
-					outfile.write("{} {} {}\n".format(name, label, str_feats))
-					name = name + 1
+						outfile.write("{}\n".format(str_feats))
+					else:
+						outfile.write("{} {} {}\n".format(name, label, str_feats))
+						name = name + 1
 	outfile.close()
 
 
@@ -230,11 +235,55 @@ def create_crf_data(sents, filename='data_mallet.txt', unlabeled=False, labels_f
 	outfile.close()
 
 if __name__ == "__main__":	
-	infile = sys.argv[1]
-	delimfile = sys.argv[2]
-	outfile = sys.argv[3]
+#Delimited only needs to be used for training data!
+	arg = sys.argv[1]
+	if arg == 'prep':
+	#ARGS prep inxml [delimitedxml] outfile.p
+	#If both xml files are passed in assume delimited output
+		if len(sys.argv) > 4: #delimited
+			inxml = sys.argv[2]
+			delimxml = sys.argv[3]
+			outfile = sys.argv[4]
+			sents = read_delimited_xml(inxml, delimxml)
+			pickle.dump(sents, open(outfile, 'wb'))
+		else:
+			inxml = sys.argv[2]
+			outfile = sys.argv[3]
+			sents = read_xml(inxml)
+			pickle.dump(sents, open(outfile, 'wb'))
+	elif arg == 'unlabeled':
+	#ARGS unlabeled outfile.in [labfile] sentfile.p 
+		outfile = sys.argv[2]
+		if len(sys.argv) > 4:
+			labfile = sys.argv[3]
+			sentfile = sys.argv[4] #make pickle file last arg
+		else:
+			labfile = 'labels.lab'
+			sentfile = sys.argv[3] #make pickle file last arg
+		sents = pickle.load(open(sentfile, 'rb'))
+		create_instance_data(sents, outfile, labfile)
+	elif arg == 'delim':
+	#ARGS delim outfile.in sentfile.p 
+		outfile = sys.argv[2]
+		sentfile = sys.argv[3] #make pickle file last arg
+		sents = pickle.load(open(sentfile, 'rb'))
+		create_instance_data(sents, outfile, None, True)
+	#ARGS outfile.in sentfile.p 
+	else:
+		outfile = sys.argv[1] 
+		sentfile = sys.argv[2] #make pickle file last arg
+		sents = pickle.load(open(sentfile, 'rb'))
+		create_instance_data(sents, outfile)
+
+	print("done")
+		
+
+
+#	infile = sys.argv[1]
+#	delimfile = sys.argv[2]
+#	outfile = sys.argv[3]
 #	sents = read_xml(infile)
-	sents = read_delimited_xml(infile, delimfile)
+#	sents = read_delimited_xml(infile, delimfile)
 
 #	if len(sys.argv) > 3:
 #		#create_instance_data(sents, outfile, sys.argv[3]) #create origianl label file
@@ -242,5 +291,5 @@ if __name__ == "__main__":
 #	else:
 		#create_instance_data(sents, outfile)
 
-	create_instance_data(sents, outfile, None, True)
-	print("done")
+#	create_instance_data(sents, outfile)
+#	create_instance_data(sents, outfile, None, True)

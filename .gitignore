@@ -14,4 +14,5 @@ mallet/
 mallet-src/
 MASC-3.0.0/
 stanford-corenlp/
+*.p
 

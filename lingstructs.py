@@ -282,13 +282,11 @@ class CorrectionFeatures:
 		fvect.append(prev_head.pos + "prevhead")	
 		fvect.append(time_adverb(error.last(), self.sentence, False).word + "tadverbright")
 		fvect.append(time_adverb(error.first(), self.sentence, True).word + "tadverbleft")
+
 		if get_aspect(error):
 			fvect.append(get_aspect(error)) #label
-			if get_aspect(error) == 'ERROR':
-				print('{} Trasnducer error'.format(error.fst_sequence()))	
 		else:
 			fvect.append('ERROR')
-			print('{} No transducer out label'.format(error.fst_sequence()))	
 
 		return fvect
 
@@ -357,10 +355,10 @@ class Features:
 
 		if get_aspect(self.instance):
 			fvect.append(get_aspect(self.instance)) #label
-			if get_aspect(self.instance) == 'ERROR':
-				print('{} {}'.format(self.instance.fst_sequence(), self.instance.tostring()))	
+#			if get_aspect(self.instance) == 'ERROR':
+#				print('{} {}'.format(self.instance.fst_sequence(), self.instance.tostring()))	
 		else:
-			print('{} {}'.format(self.instance.fst_sequence(), self.instance.tostring()))
+#			print('{} {}'.format(self.instance.fst_sequence(), self.instance.tostring()))
 			fvect.append('ERROR')
 		return fvect
 
