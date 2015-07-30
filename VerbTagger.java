@@ -1,14 +1,6 @@
-/* Copyright (C) 2003 University of Pennsylvania.
-   This file is part of "MALLET" (MAchine Learning for LanguagE Toolkit).
-   http://www.cs.umass.edu/~mccallum/mallet
-   This software is provided under the terms of the Common Public License,
-   version 1.0, as published by http://www.opensource.org.  For further
-   information, see the file `LICENSE' included with this distribution. */
-
 /* A hacked together modification of mallet's SimpleTagger program 
 	much of the code is similar/copied exactly (the reason being the
-	SimpleTagger program cannot be extended). Most changes are in the 
-	apply() method and the end of the main method.
+	SimpleTagger program cannot be extended). 
 	Note that this program does not do training, so do your training with 
 	the SimpleTagger program
 */
@@ -370,11 +362,9 @@ public class VerbTagger {
 
 					if(bestOut.getWeight() - origOut.getWeight() < THRESHOLD) { 
 						outputs[0] = origOut.output();  //no big enough change, make no corrections(use original) 
-						//System.out.println("ORIGINAL");	
 					}
 					else {
 						outputs[0] = bestOut.output(); //make the correction (use best sequence) 
-						//	System.out.println("BEST");
 					}
 					//Using final weights as well
 					/*if(w - o < THRESHOLD) {
@@ -383,15 +373,10 @@ public class VerbTagger {
 					else {
 						outputs[0] = foo;
 					}*/
-
-
-
 				} 
 				else {
-			//		System.out.println("TESTING");
 					outputs = apply(crf, input, nBestOption.value); 
 				}
-
 				int k = outputs.length;
 				boolean error = false;
 				for (int a = 0; a < k; a++) {
@@ -414,10 +399,8 @@ public class VerbTagger {
 					}
 					System.out.println();
 				} 
-				
 			}
 		}
-
 		if (trainingFile != null) { trainingFile.close(); }
 		if (testFile != null) { testFile.close(); }
 	}

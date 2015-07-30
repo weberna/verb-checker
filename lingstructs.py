@@ -261,6 +261,11 @@ class CorrectionFeatures:
 		fvect.append(get_aspect(corr) + "corrAspect")
 		fvect.append(corr.head().word + "self")
 		fvect.append(str(corr.length) + "len")
+
+#		fvect.append(get_aspect(error) + "corrAspect")
+#		fvect.append(error.head().word + "self")
+#		fvect.append(str(error.length) + "len")
+
 		fvect.append(right.word + "right")
 		fvect.append(left.word + "left")
 		fvect.append(subj.pos + "subj")
@@ -283,8 +288,10 @@ class CorrectionFeatures:
 		fvect.append(time_adverb(error.last(), self.sentence, False).word + "tadverbright")
 		fvect.append(time_adverb(error.first(), self.sentence, True).word + "tadverbleft")
 
-		if get_aspect(error):
+		if get_aspect(error) and get_aspect(corr) and get_aspect(corr) != 'ERROR':
 			fvect.append(get_aspect(error)) #label
+		#if get_aspect(corr):
+		#	fvect.append(get_aspect(corr)) #label
 		else:
 			fvect.append('ERROR')
 

@@ -81,7 +81,6 @@ def get_original(elm):
 		data = data + elm.tail
 	return data
 
-
 def get_vcorrected(elm, delimit=False):
 	"""Extract the text data with only verb errors corrected
 		@params:
@@ -126,35 +125,6 @@ def match(v1, v2):
 		eq = True
 	return eq
 
-def get_hit_stats(method_verbs, gold_verbs, orig_verbs):
-	"""Return the 'hit' statistics ie return a 4-tuple of
-		(True positives, false positives, invalid positives, false negatives)
-	"""
-#	if len(method_verbs) != len(gold_verbs) or len(method_verbs) != len(orig_verbs):
-#		print("Outputs lengths not of the same size")
-#		print("{} {} {}".format(len(method_verbs), len(gold_verbs), len(orig_verbs)))
-#		return None
-	true_pos = 0
-	false_pos = 0
-	inv_pos = 0
-	false_neg = 0
-	for i in range(len(gold_verbs)):
-		if not match(gold_verbs[i], orig_verbs[i]): #there is an error
-			if match(method_verbs[i], gold_verbs[i]): #detect error correctly
-				true_pos = true_pos + 1
-				print("TruePos: {} {} {}".format(method_verbs[i], gold_verbs[i], orig_verbs[i]))
-			elif match(method_verbs[i], orig_verbs[i]):  #did not detect error
-				print("FalseNeg: {} {} {}".format(method_verbs[i], gold_verbs[i], orig_verbs[i]))
-				false_neg = false_neg + 1
-			else:						#fixed error incorrectly
-				inv_pos = inv_pos + 1
-				print("InvPos: {} {} {}".format(method_verbs[i], gold_verbs[i], orig_verbs[i]))
-		elif not match(method_verbs[i], gold_verbs[i]):   #there is no error but we detected one
-			false_pos = false_pos + 1
-			print("FalsePos: {} {} {}".format(method_verbs[i], gold_verbs[i], orig_verbs[i]))
-
-	return (true_pos, false_pos, inv_pos, false_neg)
-			
 def fix_tags(method, gold, orig):
 	"""Fix pos tags so that everything that is tagged as a verb in one 
 		output, is tagged as a verb in the other output (helps correctly compare outputs
@@ -176,58 +146,45 @@ def fix_tags(method, gold, orig):
 				for k in j:
 					k.pos = 'VB'  #mark all 3 words as verbs (at this point, the exact pos tag is irrelevent, so just mark as arbitrary VB)
 
+def get_hit_stats(method_lab, gold_lab, orig_lab):
+	true_pos = 0
+	false_pos = 0
+	inv_pos = 0
+	false_neg = 0
+	for i in range(len(method_lab)):
+		if gold_lab[i] != orig_lab[i]: #there is an error
+			if method_lab[i] == gold_lab[i]: #detect error correctly
+				true_pos = true_pos + 1
+				print("TruePos: {} {} {}".format(method_lab[i], gold_lab[i], orig_lab[i]))
+			elif method_lab[i] == orig_lab[i]:  #did not detect error
+				print("FalseNeg: {} {} {}".format(method_lab[i], gold_lab[i], orig_lab[i]))
+				false_neg = false_neg + 1
+			else:						#fixed error incorrectly
+				inv_pos = inv_pos + 1
+				print("InvPos: {} {} {}".format(method_lab[i], gold_lab[i], orig_lab[i]))
+		elif method_lab[i] != gold_lab[i]:   #there is no error but we detected one
+			false_pos = false_pos + 1
+			print("FalsePos: {} {} {}".format(method_lab[i], gold_lab[i], orig_lab[i]))
+
+	return (true_pos, false_pos, inv_pos, false_neg)
 
 def evaluate(method_out, gold_out, orig_out):
 	"""Evaluate the results of the method against gold standard
 		@params:
-			xmlfilename method_out - the output from the method we are testing   *output from Stanford parser*
-			xmlfilename gold_out - the output using the annoatations from fce corpus (gold standard) 
+			filename method_out - output labels from method
+			filename gold_out - output labels from corrected data
+			filename orig_out - output labels from original data
 		@ret:
 			a triplet (precision, recall, f-score)
 	"""
-	test_sents = pd.read_xml(method_out, getdeps=False)
-	gold_sents = pd.read_xml(gold_out, getdeps=False)
-	orig_sents = pd.read_xml(orig_out, getdeps=False)
-	fix_tags(test_sents, gold_sents, orig_sents)
-#	for i in range(10):
-#		for j in test_sents[i].sen:
-		#	print(j.pos)
-	#		print("{}, {}".format(j.pos, j.word))	
-	#return (0, 0)
-	test_verbs = []
-	gold_verbs = []
-	orig_verbs = []
+	mf = open(method_out, 'r')
+	gf = open(gold_out, 'r')
+	of = open(orig_out, 'r')
+	method_labs = [x.strip('\n') for x in mf.readlines()]
+	gold_labs = [x.strip('\n') for x in gf.readlines()]
+	orig_labs = [x.strip('\n') for x in of.readlines()]
 
-	for s in test_sents:
-		for tok in s.sen:
-			if tok.isverb(): # and tok.pos != 'MD': 
-				test_verbs.append(tok.word)
-	for s in gold_sents:
-		for tok in s.sen:
-			if tok.isverb(): # and tok.pos != 'MD': 
-				gold_verbs.append(tok.word)
-	for s in orig_sents:
-		for tok in s.sen:
-			if tok.isverb(): # and tok.pos != 'MD': 
-				orig_verbs.append(tok.word)
-#	sents = zip(test_sents, gold_sents, orig_sents)
-#	for i in sents:
-#		t = i[0].sen
-#		g = i[1].sen
-#		o = i[2].sen
-#		s = zip(t, g, o)
-#		for tok in s:
-#			if all(a.isverb() for a in tok) and tok[0].lemma  == tok[1].lemma and tok[0].lemma == tok[2].lemma: 
-#				test_verbs.append(tok[0].word)	
-#				gold_verbs.append(tok[1].word)	
-#				orig_verbs.append(tok[2].word)	
-
-	print(len(test_verbs))
-	print(len(gold_verbs))
-	print(len(orig_verbs))
-#	return (0, 0)
-
-	stats = get_hit_stats(test_verbs, gold_verbs, orig_verbs)	#(tp, fp, ip, fn)
+	stats = get_hit_stats(method_labs, gold_labs, orig_labs)
 	print("Final Stats: {} {} {} {}".format(stats[0],stats[1],stats[2],stats[3]))
 
 	if stats:
@@ -261,13 +218,15 @@ if __name__ == "__main__":
 			dataout_delim = 'dataout_delimited'
 		data_file = open(dataout, 'w')
 		delim_file = open(dataout_delim, 'w')	
+#		data_file.write(read_fce_xml(infile, corrected=True))
+		#Want corrected=True for training, corrected=False for testing
 		data_file.write(read_fce_xml(infile, corrected=False))
 		delim_file.write(create_delimited(infile))
 	else:
-		methodxml = sys.argv[1]	
-		goldxml = sys.argv[2]
-		origxml = sys.argv[3]
-		results = evaluate(methodxml, goldxml, origxml)
+		method = sys.argv[1]	
+		gold = sys.argv[2]
+		orig = sys.argv[3]
+		results = evaluate(method, gold, orig)
 		print("Precision: {}".format(results[0]))
 		print("Recall: {}".format(results[1]))
 
