@@ -76,6 +76,7 @@ def read_delimited_xml(filename, del_filename, getdeps=True, check=True):
 	delroot = deldata.getroot()
 	sentences = root[0][0] #get the sentences tree
 	delsents = delroot[0][0]
+	prev = None #previous sentence
 	for (sen, delsen) in zip(sentences, delsents):
 		tokens = sen[0] #a single sentence split into tokens
 		deptypes = sen[1:] #the dependency relations (of various kinds) for the words in the sentence
@@ -135,122 +136,11 @@ def read_delimited_xml(filename, del_filename, getdeps=True, check=True):
 						dep = (i.find("dependent").text.lower(), int(i.find("dependent").get("idx")))
 						relation = Dependency(t, gov, dep)
 						sen_data.add_dep(relation)
+		sen_data.prev = prev
+		prev = sen_data
 		sents.append(sen_data)
 	xfile.close()
 	return sents
-
-def in_verblist(lem):
-	"""Return true if the given lemma is found in the verbnet verb list"""
-	verblist = verbnet.lemmas()
-	if lem in verblist:
-		return True
-	else:
-		return False
-
-def create_instance_data(sents, filename='data_mallet.txt',  labels_file=None, corrs=False):
-	"""Write a instance file representation in a form that can be
-		read by Mallet's Csv2Vectors script (this converts the data into binary form for Mallet's classifiers)
-		Data form:
-			<instance name> <label> <feature> ...
-		@params:
-			list of Sentences sents - the data created from read_xml() 
-			string filename - file to write to 
-			labels_file - Whether to print the labels to a seperate file (rather than including them in instance file)
-			corrs - Whether the input (sents) includes error correction data (ie it was obtained using read_delimited_xml(),
-			rather than read_xml())
-	"""
-	outfile = open(filename, 'w')
-	if labels_file:
-		lfile = open(labels_file, 'w')
-	name = 0 #for instance names just give unique number starting at 0
-	for s in sents:
-		if corrs:
-			li = s.corr_pairs
-		else:
-			li = s.get_vchains()
-		for i in li:
-			if corrs:
-				feats = CorrectionFeatures(i, s)
-			else:
-				feats = Features(i, s)
-			label = feats.fvect.pop() 
-			if label != 'ERROR': #for now, ignore data too malformed to get all features for
-				str_feats = " ".join([str(x) for x in feats.fvect])
-				if labels_file:  #write the label to the seperate label file
-					lfile.write("{}\n".format(label))	
-					outfile.write("{} {}\n".format(name, str_feats))
-				else:
-					outfile.write("{} {} {}\n".format(name, label, str_feats))
-				name = name + 1
-	outfile.close()
-
-def create_corr_data(sents, filename='data_mallet.txt',  labels_file=None):
-	outfile = open(filename, 'w')
-	if labels_file:
-		lfile = open(labels_file, 'w')
-	name = 0 #for instance names just give unique number starting at 0
-	for s in sents:
-		corr_stack = list(s.corr_pairs)
-		corr_stack.reverse()
-		for c in s.get_vchains():
-			if any(x.in_delim for x in c.chain) and corr_stack: #if verb phrase is an error use the correct label
-				feats = CorrectionFeatures(corr_stack.pop(), s)
-			else:
-				feats = CorrectionFeatures(CorrectionPair(c, c), s)
-			label = feats.fvect.pop() 
-			if label != 'ERROR': #for now, ignore data too malformed to get all features for
-				str_feats = " ".join([str(x) for x in feats.fvect])
-				if labels_file:  #write the label to the seperate label file
-					lfile.write("{}\n".format(label))	
-					outfile.write("{}\n".format(str_feats))
-				else:
-					outfile.write("{} {} {}\n".format(name, label, str_feats))
-					name = name + 1
-	outfile.close()
-
-
-def get_testing_instances(sents, filename, corr_filename, labels_file):
-	outfile = open(filename, 'w')
-	corr_outfile = open(filename, 'w')
-	lfile = open(labels_file, 'w')
-	for s in sents:
-		corr_stack = list(s.corr_pairs)
-		corr_stack.reverse()
-		for c in s.get_vchains():
-			origfeats = Features(c, s)
-			orig_lab = origfeats.fvect.pop()
-			corr_lab = None
-			if any(x.in_delim for x in c.chain) and corr_stack: #if verb phrase is an error use the correct label
-				feats = CorrectionFeatures(corr_stack.pop(), s)
-				corr_lab = feats.fvect[0][:len(feats.fvect[0]) - 10]
-			if corr_lab and corr_lab != 'ERROR' and orig_lab != 'ERROR':
-				lfile.write("{}\n".format(corr_lab))	
-			elif orig_lab != 'ERROR':
-				lfile.write("{}\n".format(orig_lab))	
-
-
-
-def get_gold_labels(sents, labels_file):
-	"""Output the all correct labels (included labels that did not need to be corrected) into 
-		labels file, use these labels as gold standard for testing.
-		NOTE: sents should be obtained using read_delimited_xml() so that you have annotation data
-	"""
-	lfile = open(labels_file, 'w')
-	for s in sents:
-		corr_stack = list(s.corr_pairs)
-		corr_stack.reverse()
-		for c in s.get_vchains():
-			origfeats = Features(c, s)
-			orig_lab = origfeats.fvect.pop()
-			corr_lab = None
-			if any(x.in_delim for x in c.chain) and corr_stack: #if verb phrase is an error use the correct label
-				feats = CorrectionFeatures(corr_stack.pop(), s)
-				corr_lab = feats.fvect[0][:len(feats.fvect[0]) - 10]
-			if corr_lab and corr_lab != 'ERROR' and orig_lab != 'ERROR':
-				lfile.write("{}\n".format(corr_lab))	
-			elif orig_lab != 'ERROR':
-				lfile.write("{}\n".format(orig_lab))	
-
 
 def create_crf_data(sents, filename='data_mallet.txt', unlabeled=False, labels_file=None, corrs=False):
 	"""Write a data file that can be used for training or testing CRFs in Mallet. The data is written 
@@ -293,6 +183,118 @@ def create_crf_data(sents, filename='data_mallet.txt', unlabeled=False, labels_f
 				lfile.write("\n")
 	outfile.close()
 
+def in_verblist(lem):
+	"""Return true if the given lemma is found in the verbnet verb list"""
+	verblist = verbnet.lemmas()
+	if lem in verblist:
+		return True
+	else:
+		return False
+
+def all_instance_data(sents, filename, labels_file=None):
+	"""Write a instance file representation in a form that can be
+		read by Mallet's Csv2Vectors script (this converts the data into binary form for Mallet's classifiers)
+		Data form:
+			<instance name> <label> <feature> ...
+		This gets all verb chain instances, use this for gathering instance data for language model, not for correction
+		model
+		@params:
+			list of Sentences sents - the data created from read_xml() 
+			string filename - file to write to 
+			labels_file - Whether to print the labels to a seperate file (rather than including them in instance file)
+	"""
+	outfile = open(filename, 'w')
+	if labels_file:
+		lfile = open(labels_file, 'w')
+	name = 0 #for instance names just give unique number starting at 0
+	for s in sents:
+		li = s.get_vchains()
+		for i in li:
+			feats = Features(i, s)
+			label = feats.fvect.pop() 
+			if label != 'ERROR': #for now, ignore data too malformed to get all features for
+				str_feats = " ".join([str(x) for x in feats.fvect])
+				if labels_file:  #write the label to the seperate label file
+					lfile.write("{}\n".format(label))	
+					outfile.write("{} {}\n".format(name, str_feats))
+				else:
+					outfile.write("{} {} {}\n".format(name, label, str_feats))
+				name = name + 1
+	outfile.close()
+	if labels_file:
+		lfile.close()
+
+def create_corr_train_data(sents, filename):
+	outfile = open(filename, 'w')
+	name = 0 #for instance names just give unique number starting at 0
+	for s in sents:
+		corr_stack = list(s.corr_pairs)
+		corr_stack.reverse()
+		for c in s.get_vchains():
+			if any(x.in_delim for x in c.chain) and corr_stack: #if verb phrase is an error use the correct label
+				feats = CorrectionFeatures(corr_stack.pop(), s)
+			else:
+				feats = CorrectionFeatures(CorrectionPair(c, c), s)
+			label = feats.fvect.pop() 
+			if label != 'ERROR': #for now, ignore data too malformed to get all features for
+				str_feats = " ".join([str(x) for x in feats.fvect])
+				outfile.write("{} {} {}\n".format(name, label, str_feats))
+				name = name + 1
+	outfile.close()
+
+
+
+def clean_instance_data(sents, filename, labels_file=None, corr=False):
+	"""Get cleaned instance data needed for testing/training. The difference between this and all_instance_data() is 
+		that this method only includes instances that do not have a label that equals ERROR for both its
+		corresponding Features and CorrectionFeatures object (this ensures that we can correctly analyze 
+		the quality of our results)  
+		Use this method to get regular instance data for testing or correction instance data for training
+	"""
+	if labels_file:
+		lfile = open(labels_file, 'w')
+	outfile = open(filename, 'w')
+	name = 0 #for instance names just give unique number starting at 0
+	for s in sents:
+		flist = s.get_feats(corr) #list of all features in sentence
+		for feats in flist:
+			label = feats.fvect.pop()
+			if label != 'ERROR':
+				str_feats = " ".join([str(x) for x in feats.fvect])
+				if labels_file:  #write labels to seperate file
+					outfile.write("{} {}\n".format(name, str_feats))
+					lfile.write("{}\n".format(label))
+				else:
+					outfile.write("{} {} {}\n".format(name, label, str_feats))
+				name = name + 1
+	outfile.close()
+	if labels_file:
+		lfile.close()
+
+def create_corr_data(sents, filename, labels_file):
+	"""Create correction instance data for testing, puts all CorrectionFeature instances
+		in one file, with the correct labels in another file, use these as the gold label set
+		for testing
+	"""
+	lfile = open(labels_file, 'w')
+	outfile = open(filename, 'w')
+	name = 0 #for instance names just give unique number starting at 0
+	for s in sents:
+		flist = s.get_feats(True) #list of all CorrectionFeatures in sentence
+		for feats in flist:
+#			correction = feats.fvect[0][:len(feats.fvect[0]) - 10]
+			correction = feats.fvect.pop()
+#			label = feats.fvect.pop()
+			label = feats.fvect[0][:len(feats.fvect[0]) - 10]
+			if correction != 'ERROR':
+			#if label != 'ERROR':
+				str_feats = " ".join([str(x) for x in feats.fvect[1:]])  #get all features except correction/error
+				outfile.write("{} {}\n".format(name, str_feats))
+				lfile.write("{}\n".format(correction))	
+			name = name + 1
+	outfile.close()
+	lfile.close()
+
 if __name__ == "__main__":	
 #Delimited only needs to be used for training data!
 	arg = sys.argv[1]
@@ -310,35 +312,33 @@ if __name__ == "__main__":
 			outfile = sys.argv[3]
 			sents = read_xml(inxml)
 			pickle.dump(sents, open(outfile, 'wb'))
-	elif arg == 'unlabeled':
-	#ARGS unlabeled outfile.in [labfile] sentfile.p 
+	elif arg == 'testing': #create Features instance data with labels in seperate file for testing (use testout_delim.p for sent data)
+	#ARGS testing outfile.in origlabels sentfile.p 
 		outfile = sys.argv[2]
-		if len(sys.argv) > 4:
-			labfile = sys.argv[3]
-			sentfile = sys.argv[4] #make pickle file last arg
-		else:
-			labfile = 'labels.lab'
-			sentfile = sys.argv[3] #make pickle file last arg
+		labelfile = sys.argv[3]
+		sentfile = sys.argv[4] #make pickle file last arg
 		sents = pickle.load(open(sentfile, 'rb'))
-		create_instance_data(sents, outfile, labfile)
-	elif arg == 'delim': #create instance data from error delimed data
-	#ARGS delim outfile.in sentfile.p 
+		clean_instance_data(sents, outfile, labelfile, False)
+	elif arg == 'corr-train': #create CorrectionFeatures instance data for correction model training from error delimed data
+	#ARGS corr-train outfile.in sentfile.p 
 		outfile = sys.argv[2]
 		sentfile = sys.argv[3] #make pickle file last arg
 		sents = pickle.load(open(sentfile, 'rb'))
-		#create_instance_data(sents, outfile, None, corrs=True)
-		create_corr_data(sents, outfile, None)
-	elif arg == 'gold':
+		clean_instance_data(sents, outfile, None, True)
+#		create_corr_train_data(sents, outfile)
+	elif arg == 'gold': #create CorrectionFeatures instance data for testing, along with gold labels
+	#ARGS gold outfile.in corrlabels sentfile.p	
 		outfile = sys.argv[2]
-		sentfile = sys.argv[3]
+		labelfile = sys.argv[3]
+		sentfile = sys.argv[4]
 		sents = pickle.load(open(sentfile, 'rb'))
-		get_gold_labels(sents, outfile)
+		create_corr_data(sents, outfile, labelfile)
 	#ARGS outfile.in sentfile.p 
-	else:
+	else:  #get all instance data for language model training
 		outfile = sys.argv[1] 
 		sentfile = sys.argv[2] #make pickle file last arg
 		sents = pickle.load(open(sentfile, 'rb'))
-		create_instance_data(sents, outfile)
+		all_instance_data(sents, outfile)
 
 	print("done")
 		

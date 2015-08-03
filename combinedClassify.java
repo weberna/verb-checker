@@ -16,15 +16,6 @@ import cc.mallet.pipe.iterator.*;
 import cc.mallet.types.*;
 import cc.mallet.util.*;
 
-/**
- * Command line tool for classifying a sequence of  
- *  instances directly from text input, without
- *  creating an instance list.
- *  <p>
- * 
- *  @author David Mimno
- *  @author Gregory Druck
- */
 
 public class combinedClassify {
 	
@@ -34,6 +25,10 @@ public class combinedClassify {
 	static CommandOption.File inputFile =	new CommandOption.File
 		(combinedClassify.class, "input", "FILE", true, null,
 		 "The file containing data to be classified, one instance per line", null);
+
+	static CommandOption.File corrInstanceFile =	new CommandOption.File
+		(combinedClassify.class, "corr-instances", "FILE", true, null,
+		 "The file containing correction data to be classified, one instance per line", null);
 
 	static CommandOption.File outputFile = new CommandOption.File
 		(combinedClassify.class, "output", "FILE", true, new File("output"),
@@ -138,12 +133,12 @@ public class combinedClassify {
 		else {
 			fileReader = new InputStreamReader(new FileInputStream(inputFile.value), encoding.value);
 		}
-		Reader fileReaderNonPiped; 
+		Reader fileReaderCorr; 
 		if (inputFile.value.toString().equals ("-")) {
-		    fileReaderNonPiped = new InputStreamReader (System.in);
+		    fileReaderCorr = new InputStreamReader (System.in);
 		}
 		else {
-			fileReaderNonPiped = new InputStreamReader(new FileInputStream(inputFile.value), encoding.value);
+			fileReaderCorr = new InputStreamReader(new FileInputStream(corrInstanceFile.value), encoding.value);
 		}
 
 		Iterator<Instance> csvIterator = 
@@ -151,11 +146,10 @@ public class combinedClassify {
 			dataOption.value, 0, nameOption.value);
 		Iterator<Instance> iterator = 
 			classifier.getInstancePipe().newIteratorFrom(csvIterator);
-		//iterator that keeps string form of data	
-		Iterator<Instance> strDataIter = 
-			new CsvIterator (fileReaderNonPiped, Pattern.compile(lineRegex.value),
+		Iterator<Instance> corrIterator = 
+			new CsvIterator (fileReaderCorr, Pattern.compile(lineRegex.value),
 			dataOption.value, 0, nameOption.value);
-		
+
 		// Write classifications to the output file
 		PrintStream out = null;
 
@@ -174,30 +168,35 @@ public class combinedClassify {
 		ArrayList<String> labels = readOutputFile(labelFile.value); //get labels
 		ListIterator labelIter = labels.listIterator();
 		//process throught all instances
-		while (iterator.hasNext()) { 
+		while (iterator.hasNext() && corrIterator.hasNext()) { 
 			Instance instance = iterator.next();
-			Instance strInstance = strDataIter.next(); //get the string form of the instances data 
+			Instance corrInstance = corrIterator.next();
 			String origLabelStr = null;
+			Label origLabel = null;
+			//get the original (possibly wrong) labels
 			if(labelIter.hasNext()) {
 				origLabelStr = labelIter.next().toString();	
+				origLabel = classifier.getLabelAlphabet().lookupLabel(origLabelStr);
 			}
 			Labeling labs = classifier.classify(instance).getLabeling();
 			double bestValue = 0;
 			String bestLabelStr = null;
-			Label origLabel = null;
 			Label bestLabel = null;
-			
+			//iterate through all labels, choose most likely correction
 			for(int i=0; i < classifier.getLabelAlphabet().size(); i++) { 
 				Label l = labs.getLabelAtRank(i);
 				//Add aspect lable as feature 
-				String newStrData = l.toString() + "corrAspect " + strInstance.getData();	
+//				String labStrData = l.toString() + "corrAspect " + corrInstance.getData();	 //use this for generative
+				String labStrData = origLabelStr + "corrAspect " + corrInstance.getData();		
 				//Send the new string instance throught the 2nd classifier's pipe, then get the labeling from classifying it
-				Instance newInstance = corrClassifier.getInstancePipe().instancesFrom(new Instance(newStrData, null, null, null))[0];
+				Instance newInstance = corrClassifier.getInstancePipe().instancesFrom(new Instance(labStrData, null, null, null))[0];
 				Labeling corrLabs = corrClassifier.classify(newInstance).getLabeling(); //classifier for second part of model
-				if(l.toString().equals(origLabelStr)) {
-					origLabel = l;
+				double m = 1.0;
+				if(l.toString().equals(origLabel.toString())) {
+					m = 1.0;
 				}
-				double tempValue = corrLabs.value(l) * labs.value(l);
+//				double tempValue = m * corrLabs.value(origLabel) * labs.value(l);
+				double tempValue = m * corrLabs.value(l);
 			//	out.println(corrLabs.value(l));
 			//	out.println(labs.value(l));
 				if(tempValue > bestValue) {
@@ -207,7 +206,7 @@ public class combinedClassify {
 				}
 			}
 
-			String newStrData = bestLabel.toString() + "corrAspect " + strInstance.getData();	
+/*			String newStrData = bestLabel.toString() + "corrAspect " + strInstance.getData();	
 			Instance newInstance = corrClassifier.getInstancePipe().instancesFrom(new Instance(newStrData, null, null, null))[0];
 			Labeling corrLabs = corrClassifier.classify(newInstance).getLabeling(); //classifier for second part of model
 			if(origLabel != null && (bestValue - (corrLabs.value(origLabel) * labs.value(origLabel)) < THRESHOLD)) {
@@ -215,7 +214,8 @@ public class combinedClassify {
 			}
 			else {
 				out.println(bestLabelStr);
-			}
+			} */
+			out.println(bestLabelStr);
 		}
 		if (! outputFile.value.toString().equals ("-")) {
 			out.close();
