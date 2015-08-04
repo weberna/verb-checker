@@ -191,7 +191,7 @@ def in_verblist(lem):
 	else:
 		return False
 
-def all_instance_data(sents, filename, labels_file=None):
+def write_all_instances(sents, filename, labels_file=None):
 	"""Write a instance file representation in a form that can be
 		read by Mallet's Csv2Vectors script (this converts the data into binary form for Mallet's classifiers)
 		Data form:
@@ -242,9 +242,7 @@ def create_corr_train_data(sents, filename):
 				name = name + 1
 	outfile.close()
 
-
-
-def clean_instance_data(sents, filename, labels_file=None, corr=False):
+def write_clean_instances(sents, filename, labels_file=None, corr=False):
 	"""Get cleaned instance data needed for testing/training. The difference between this and all_instance_data() is 
 		that this method only includes instances that do not have a label that equals ERROR for both its
 		corresponding Features and CorrectionFeatures object (this ensures that we can correctly analyze 
@@ -287,7 +285,7 @@ def create_corr_data(sents, filename, labels_file):
 #			label = feats.fvect.pop()
 			label = feats.fvect[0][:len(feats.fvect[0]) - 10]
 			if correction != 'ERROR':
-			#if label != 'ERROR':
+#			if label != 'ERROR':
 				str_feats = " ".join([str(x) for x in feats.fvect[1:]])  #get all features except correction/error
 				outfile.write("{} {}\n".format(name, str_feats))
 				lfile.write("{}\n".format(correction))	
@@ -318,13 +316,13 @@ if __name__ == "__main__":
 		labelfile = sys.argv[3]
 		sentfile = sys.argv[4] #make pickle file last arg
 		sents = pickle.load(open(sentfile, 'rb'))
-		clean_instance_data(sents, outfile, labelfile, False)
+		write_clean_instances(sents, outfile, labelfile, False)
 	elif arg == 'corr-train': #create CorrectionFeatures instance data for correction model training from error delimed data
 	#ARGS corr-train outfile.in sentfile.p 
 		outfile = sys.argv[2]
 		sentfile = sys.argv[3] #make pickle file last arg
 		sents = pickle.load(open(sentfile, 'rb'))
-		clean_instance_data(sents, outfile, None, True)
+		write_clean_instances(sents, outfile, None, True)
 #		create_corr_train_data(sents, outfile)
 	elif arg == 'gold': #create CorrectionFeatures instance data for testing, along with gold labels
 	#ARGS gold outfile.in corrlabels sentfile.p	
@@ -338,7 +336,7 @@ if __name__ == "__main__":
 		outfile = sys.argv[1] 
 		sentfile = sys.argv[2] #make pickle file last arg
 		sents = pickle.load(open(sentfile, 'rb'))
-		all_instance_data(sents, outfile)
+		write_all_instances(sents, outfile)
 
 	print("done")
 		

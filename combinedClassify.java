@@ -47,18 +47,25 @@ public class combinedClassify {
 	static CommandOption.File labelFile = new CommandOption.File
 		(combinedClassify.class, "labels", "FILE", true, new File("labels"),
 		 "File containing the original labels, one per line", null); 
+	
+	static CommandOption.File testClassifierFile = new CommandOption.File
+		(combinedClassify.class, "test-classifier", "FILE", true, new File("test-classifier"),
+		 "Use the pipe and alphabets from a previously created vectors file.\n" +
+		 "   Allows the creation, for example, of a test set of vectors that are\n" +
+		 "   compatible with a previously created set of training vectors", null);
 
+//The default regex assumes some name in the front (first group is name) seperate by space/comma, (second group is data)
 	static CommandOption.String lineRegex = new CommandOption.String
 		(combinedClassify.class, "line-regex", "REGEX", true, "^(\\S*)[\\s,]*(.*)$",
 		 "Regular expression containing regex-groups for label, name and data.", null);
 	
 	static CommandOption.Integer nameOption = new CommandOption.Integer
-		(combinedClassify.class, "name", "INTEGER", true, 1,  //was 1
+		(combinedClassify.class, "name", "INTEGER", true, 1,  //group 1 is name
 		 "The index of the group containing the instance name.\n" +
          "   Use 0 to indicate that the name field is not used.", null);
 
 	static CommandOption.Integer dataOption = new CommandOption.Integer
-		(combinedClassify.class, "data", "INTEGER", true, 2,  //was 2
+		(combinedClassify.class, "data", "INTEGER", true, 2,  //group 2 is data
 		 "The index of the group containing the data.", null);
 
 	static CommandOption.String encoding = new CommandOption.String
@@ -104,6 +111,7 @@ public class combinedClassify {
 	  // Read both classifiers from file
 		Classifier classifier = null;
 		Classifier corrClassifier = null;
+		Classifier testClassifier = null;
 		try { //load first classifier
 			ObjectInputStream ois =
 				new ObjectInputStream (new BufferedInputStream(new FileInputStream (classifierFile.value)));
@@ -124,6 +132,17 @@ public class combinedClassify {
 			throw new IllegalArgumentException("Problem loading classifier from file " + corrClassifierFile.value +
 							   ": " + e.getMessage());
 		}
+
+/*		try { //load test clasifier
+			ObjectInputStream ois =
+				new ObjectInputStream (new BufferedInputStream(new FileInputStream (testClassifierFile.value)));
+			
+			testClassifier = (Classifier) ois.readObject();
+			ois.close();
+		} catch (Exception e) {
+			throw new IllegalArgumentException("Problem loading classifier from file " + testClassifierFile.value +
+							   ": " + e.getMessage());
+		}*/
 
 		// Read instances from the file
 		Reader fileReader;
@@ -170,15 +189,25 @@ public class combinedClassify {
 		//process throught all instances
 		while (iterator.hasNext() && corrIterator.hasNext()) { 
 			Instance instance = iterator.next();
-			Instance corrInstance = corrIterator.next();
+			Instance corrInstance = corrIterator.next(); 
 			String origLabelStr = null;
 			Label origLabel = null;
+
+
 			//get the original (possibly wrong) labels
 			if(labelIter.hasNext()) {
 				origLabelStr = labelIter.next().toString();	
 				origLabel = classifier.getLabelAlphabet().lookupLabel(origLabelStr);
 			}
+			else {
+				System.out.println("Out of labels");
+			}
 			Labeling labs = classifier.classify(instance).getLabeling();
+			//create instance from string data for main classifier
+		/*	String labStrData = origLabelStr + "corrAspect " + corrInstance.getData();		
+			Instance newInstance = corrClassifier.getInstancePipe().instancesFrom(new Instance(labStrData, null, null, null))[0];
+			Labeling corrLabs = corrClassifier.classify(newInstance).getLabeling(); //classifier for second part of model*/
+
 			double bestValue = 0;
 			String bestLabelStr = null;
 			Label bestLabel = null;
@@ -186,17 +215,21 @@ public class combinedClassify {
 			for(int i=0; i < classifier.getLabelAlphabet().size(); i++) { 
 				Label l = labs.getLabelAtRank(i);
 				//Add aspect lable as feature 
-//				String labStrData = l.toString() + "corrAspect " + corrInstance.getData();	 //use this for generative
+//				String labStrData2 = l.toString() + "corrAspect " + corrInstance.getData();	 //use this for generative
+
 				String labStrData = origLabelStr + "corrAspect " + corrInstance.getData();		
 				//Send the new string instance throught the 2nd classifier's pipe, then get the labeling from classifying it
 				Instance newInstance = corrClassifier.getInstancePipe().instancesFrom(new Instance(labStrData, null, null, null))[0];
+//				Instance newInstance2 = testClassifier.getInstancePipe().instancesFrom(new Instance(labStrData2, null, null, null))[0]; //testing
 				Labeling corrLabs = corrClassifier.classify(newInstance).getLabeling(); //classifier for second part of model
+		//		Labeling testLabs = testClassifier.classify(newInstance2).getLabeling(); //classifier for second part of model
 				double m = 1.0;
 				if(l.toString().equals(origLabel.toString())) {
 					m = 1.0;
 				}
-//				double tempValue = m * corrLabs.value(origLabel) * labs.value(l);
+//				double testValue = 0.5 * b * testLabs.value(origLabel) * labs.value(l);
 				double tempValue = m * corrLabs.value(l);
+//				double tempValue = testValue + (m*corrLabs.value(l));
 			//	out.println(corrLabs.value(l));
 			//	out.println(labs.value(l));
 				if(tempValue > bestValue) {
@@ -205,6 +238,9 @@ public class combinedClassify {
 					bestLabelStr = l.toString();
 				}
 			}
+	/*		if(!bestLabelStr.equals(origLabelStr)) {
+				System.out.println(labs.value(origLabel) + " " + labs.value(bestLabel) + " " + corrLabs.value(origLabel) + " " + bestValue);
+			}*/
 
 /*			String newStrData = bestLabel.toString() + "corrAspect " + strInstance.getData();	
 			Instance newInstance = corrClassifier.getInstancePipe().instancesFrom(new Instance(newStrData, null, null, null))[0];
