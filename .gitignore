@@ -15,4 +15,11 @@ mallet-src/
 MASC-3.0.0/
 stanford-corenlp/
 *.p
+view_crf.sh
+verbTenseChanger.pl
+VerbTagger*
+annotate_pos.sh
+run_crf.sh
+train_crf.sh
+README_VerbChanger
 

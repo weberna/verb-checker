@@ -4,10 +4,8 @@
 #		from the xml output produced by the Stanford CoreNLP
 #		pipeline
 ############################################################
-#Note that this code assumes that xml is in correct format 
-#and that feature extracting assumes that all words have 
-#been lowercased 
 import fst
+import string
 from nltk.corpus import verbnet
 
 class Token:
@@ -32,11 +30,9 @@ class Token:
 			else return false if not a noun
 		"""
 		if self.word == 'i' or self.word == 'I':
-#			return 'FirstSingular'
-			return '1stSingular'
+			return 'FirstSingular'
 		elif self.pos == 'NN' or self.pos == 'NNP' or self.word.lower() in ['he', 'she', 'it']:
-#			return 'ThirdSingular'
-			return '3rdSingular'
+			return 'ThirdSingular'
 		elif self.pos == 'NNS' or self.pos == 'NNPS' or self.word.lower() in ['we', 'you', 'they']:
 			return 'Plural'
 		else:
@@ -67,32 +63,12 @@ class Token:
 	def copy(self):
 		return Token(self.word, self.lemma, self.pos, self.tid, self.in_delim)
 
-	#verb labels
-	def get_label_new(self):
-		"""Return the label of the verb token"""
-		p = self.pos
-		label = ""
-		if self.lemma == 'be':
-			if subonly:  #return only subtype
-				label = "be"
-			else:
-				label = "{}[be]".format(p)
-		elif self.lemma == 'have':
-			if subonly:  #return only subtype
-				label = "have"
-			else:
-				label = "{}[have]".format(p)
-		elif self.lemma == 'do':
-			if subonly:  #return only subtype
-				label = "do"
-			else:
-				label = "{}[do]".format(p)
+	def isvalid(self):
+		"""Return True is token is a non null or root (tid==0) token"""
+		if self.tid > 0:
+			return True
 		else:
-			if subonly:  #return only subtype
-				label = "main"
-			else:
-				label = "{}[main]".format(p)
-		return label
+			return False
 
 	def isaux(self):
 		"""return True if verb is auxiliary verb"""
@@ -110,26 +86,14 @@ class Token:
 		else:
 			return False
 
-	def get_label(self):
-		p=self.pos
-		label=""
-		if self.lemma == 'be':
-			if (self.word == 'are') or (self.word == 'were'):
-				label = "{}[auxplural]".format(p)
-			else:
-				label = self.pos
-		else:
-			label = self.pos
-		return label
-
 #note that most token/token property searching methods just return a NullToken object if 
 #no sutiable token/token property could be found
 class NullToken(Token):
 	'NullToken class represents non exsistent Tokens, use for error handeling'
 	def __init__(self):
-		self.word = 'None'
-		self.lemma = 'None'
-		self.pos = 'None'
+		self.word = '__NULL__TOKEN'
+		self.lemma = '__NULL__TOKEN'
+		self.pos = '__NULL__TOKEN'
 		self.tid = -1
 
 class VChain:
@@ -224,7 +188,7 @@ class Dependency:
 		return self.dependent[0]
 
 class CorrectionFeatures:	
-	'Creates and stores features for a verb phrase error and correction (for the P(O | C, S) part of model)'
+	'Creates and stores features for a verb phrase error and correction'
 	def __init__(self, pair, s):
 		"""@params: 
 			CorrectionPair pair 	
@@ -253,8 +217,16 @@ class CorrectionFeatures:
 		error = self.instance.error
 		#extract data needed for features
 		subj = self.sentence.get_subject_token()[0]
-		left = self.sentence.get_token(error.first().tid - 1)
-		right = self.sentence.get_token(error.last().tid + 1)
+		left = self.sentence.get_token_left(error.first().tid)
+		right = self.sentence.get_token_right(error.last().tid)
+
+		left2 = self.sentence.get_token_left(left.tid)
+		left3 = self.sentence.get_token_left(left2.tid)
+		left4 = self.sentence.get_token_left(left3.tid)
+		right2 = self.sentence.get_token_right(right.tid)
+		right3 = self.sentence.get_token_right(right2.tid)
+		right4 = self.sentence.get_token_right(right3.tid)
+
 		leftnoun = closest_noun(error.first(), self.sentence, True)
 		rightnoun = closest_noun(error.last(), self.sentence, False)
 		gov_tuple = self.sentence.get_gov(error.head().tid)
@@ -263,67 +235,107 @@ class CorrectionFeatures:
 		governee_tuple = governee_list[0]
 		governee_token = self.sentence.get_token(governee_tuple[1])
 		prevphrase = prev_vphrase(error, self.sentence)
+
+		ladv = time_adverb(error.first(), self.sentence, True)
+		radv = time_adverb(error.last(), self.sentence, False)
+
+		governee_rels = [x[0] + "governeerel" for x in governee_list]
+		governees = [self.sentence.get_token(x[1]).abbv_to_word() + "governee" for x in governee_list]
+		governeespos = [self.sentence.get_token(x[1]).pos + "governee" for x in governee_list]
+
+		det = self.sentence.get_det(subj.tid) 
+
+		vnet_classes = verbnet.classids(error.head().lemma)
+		if not vnet_classes:
+			vnet_class = []
+		else:
+			vnet_class = ["".join([x for x in classes if str.isalpha(x)]) for classes in vnet_classes]
+			vnet_class = [x + "class" for x in vnet_class]
+
 		if prevphrase:
 			prevhead = prevphrase.head()
 			c = verbnet.classids(prevhead.lemma)
 			if not c:	
-				prevclass = 'NoPrevClass'
+				prevclass = None 
 			else:
 				prevclass = c[0] 
+				prevclass = "".join([x for x in prevclass if str.isalpha(x)])
 			prevaspect = get_aspect(prevphrase)
 		else:
-			prevhead = NullToken()
-			prevclass = 'NoPrevClass'
-			prevaspect = 'NoPrevAspect'
-		vnet_class = verbnet.classids(error.head().lemma)
+			prevhead = None
+			prevclass = None  
+			prevaspect = None
 
+		#put original verb phrase down as first feature
+		fvect.append(get_aspect(error) + "origAspect")
+		fvect.append(error.head().abbv_to_word() + "self")
 
-#		fvect.append(get_aspect(corr) + "corrAspect")
-#		fvect.append(corr.head().word + "self")
-		
+#		fvect.extend(vnet_class)
 
-		fvect.append(get_aspect(error) + "corrAspect")
-		fvect.append(error.head().word + "self")
+		if prevhead:	
+			fvect.append(prevhead.abbv_to_word() + "prevword")
+			fvect.append(prevhead.pos + "prevpos")
+#		if prevclass:
+#			fvect.append(prevclass + "prevclass")
+		if prevaspect:
+			fvect.append(prevaspect + "prevaspect")
 
-		fvect.append(prevhead.lemma + "prevword")
-		fvect.append(prevhead.pos + "prevpos")
-		fvect.append(prevclass)
-		fvect.append(prevaspect + "prevaspect")
+#		fvect.append(right2.word + "right")
+#		fvect.append(left2.word + "left")
+#		fvect.append(right2.pos + "right")
+#		fvect.append(left2.pos + "left")
 
-		fvect.append(right.word + "right")
+#		fvect.append(right3.word + "right")
+#		fvect.append(left3.word + "left")
+#		fvect.append(right3.pos + "right")
+#		fvect.append(left3.pos + "left")
+#
+#		fvect.append(right4.word + "right")
+#		fvect.append(left4.word + "left")
+#		fvect.append(right4.pos + "right")
+#		fvect.append(left4.pos + "left")
+
+		fvect.append(right.abbv_to_word() + "right")
 		fvect.append(right.pos + "right")
-		fvect.append(left.word + "left")
+		fvect.append(left.abbv_to_word() + "left")
 		fvect.append(left.pos + "left")
 		fvect.append(subj.pos + "subj")
-		fvect.append(subj.lemma + "subjlem")
+		fvect.append(subj.abbv_to_word() + "subjlem")
 		fvect.append(str(subj.noun_person()) + "subj")
 		fvect.append(str(subj.singular_noun()) + "subj")
-		fvect.append(self.sentence.get_det(subj.tid) + "det")
+		fvect.append(det.word + "det")
 		fvect.append(str(self.sentence.ispassive()) + "passive")
 		fvect.append(str(leftnoun.noun_person()) + "leftn")
 		fvect.append(str(rightnoun.noun_person()) + "rightn")
 		fvect.append(leftnoun.pos + "leftn")
 		fvect.append(rightnoun.pos + "rightn")
+#		fvect.extend(governee_rels)
+#		fvect.extend(governees)
+#		fvect.extend(governeespos)
+
 		fvect.append(gov_token.word + "gov")
 		fvect.append(gov_token.pos + "gov")
 		fvect.append(gov_tuple[0] + "govrel")
 		fvect.append(governee_token.word + "governee")
 		fvect.append(governee_token.pos + "governee")
 		fvect.append(governee_tuple[0] + "governeerel")
-		fvect.append(time_adverb(error.last(), self.sentence, False).word + "tadverbright")
-		fvect.append(time_adverb(error.first(), self.sentence, True).word + "tadverbleft")
+		if ladv.isvalid():
+			fvect.append(ladv.word + "adverb")
+		if radv.isvalid():
+			fvect.append(radv.word + "adverb")
 
-#		if get_aspect(error) and get_aspect(corr) and get_aspect(corr) != 'ERROR':
-#			fvect.append(get_aspect(error)) #label
-		if get_aspect(corr) and get_aspect(error) and get_aspect(error) != 'ERROR':
+		#LAST THING APPENDED IS THE LABEL FOR INSTANCE
+		#Use the correction as label
+		if get_aspect(corr) and get_aspect(error) and get_aspect(error) != 'ERROR': #only use instance where both orig and correction aspect != error
 			fvect.append(get_aspect(corr)) #label
 		else:
 			fvect.append('ERROR')
 
 		return fvect
 
+#As of now this class does not need to be used, use CorrectionFeatures instead
 class Features:	
-	'Creates and stores features for a normal Verb Chain object (for P(C|S))'
+	'Creates and stores features for a normal Verb Chain object'
 	def __init__(self, phrase, s):
 		"""@params: 
 			VChain phrase - the instance for which features are stored
@@ -333,27 +345,20 @@ class Features:
 		self.instance = phrase 
 		self.fvect = self.create_fvect() #holds all features
 
-	def create_fvect(self):	
-		"""
-			Helping method which creates the final feature vector 
-			for the instance, the feature are currently:
-			lemma of instance
-			lemma of word right/left of instance
-			subject of sentence
-			pos/person/det of subject
-			does sentence have passive construct?
-			left/right noun person/lemma/pos
-			is instance first/last in chain?
-			lemma/pos/relation of governor of instance
-			lemma/pos/relation of governee of instance
-		"""
+	def create_fvect(self):
 		fvect = []
 		#extract data needed for features
 		subj = self.sentence.get_subject_token()[0]
-		left = self.sentence.get_token(self.instance.first().tid - 1)
-		left2 = self.sentence.get_token(self.instance.first().tid - 2)
-		right = self.sentence.get_token(self.instance.last().tid + 1)
-		right2 = self.sentence.get_token(self.instance.last().tid + 2)
+		left = self.sentence.get_token_left(self.instance.first().tid)
+		right = self.sentence.get_token_right(self.instance.last().tid)
+
+		left2 = self.sentence.get_token_left(left.tid)
+		left3 = self.sentence.get_token_left(left2.tid)
+		left4 = self.sentence.get_token_left(left3.tid)
+		right2 = self.sentence.get_token_right(right.tid)
+		right3 = self.sentence.get_token_right(right2.tid)
+		right4 = self.sentence.get_token_right(right3.tid)
+
 		leftnoun = closest_noun(self.instance.first(), self.sentence, True)
 		rightnoun = closest_noun(self.instance.last(), self.sentence, False)
 		gov_tuple = self.sentence.get_gov(self.instance.head().tid)
@@ -361,133 +366,48 @@ class Features:
 		governee_list = self.sentence.get_governees(self.instance.head().tid)
 		governee_tuple = governee_list[0]
 		governee_token = self.sentence.get_token(governee_tuple[1])
-
 		prevphrase = prev_vphrase(self.instance, self.sentence)
-		if prevphrase:
-			prevhead = prevphrase.head()
-			c = verbnet.classids(prevhead.lemma)
-			if not c:	
-				prevclass = 'NoPrevClass'
-			else:
-				prevclass = c[0] 
-			prevaspect = get_aspect(prevphrase)
-		else:
-			prevhead = NullToken()
-			prevclass = 'NoPrevClass'
-			prevaspect = 'NoPrevAspect'
-		vnet_class = verbnet.classids(self.instance.head().lemma)
 
+		ladv = time_adverb(self.instance.first(), self.sentence, True)
+		radv = time_adverb(self.instance.last(), self.sentence, False)
 
+		governee_rels = [x[0] + "governeerel" for x in governee_list]
+		governees = [self.sentence.get_token(x[1]).abbv_to_word() + "governee" for x in governee_list]
+		governeespos = [self.sentence.get_token(x[1]).pos + "governee" for x in governee_list]
 
+		det = self.sentence.get_det(subj.tid) 
 
-
-		fvect.append(self.instance.head().word + "self")
-		fvect.append(chr(self.instance.length + 65) + "len")
-		fvect.append(right.word + "right")
-		fvect.append(left.word + "left")
-		fvect.append(right.pos + "right")
-		fvect.append(left.pos + "left")
-		fvect.append(right2.word + "right")
-		fvect.append(left2.word + "left")
-		fvect.append(right2.pos + "right")
-		fvect.append(left2.pos + "left")
-
-		fvect.append(prevhead.lemma + "prevword")
-		fvect.append(prevhead.pos + "prevpos")
-		fvect.append(prevclass)
-		fvect.append(prevaspect + "prevaspect")
-
-
-
-
-
-		fvect.append(subj.pos + "subj")
-		fvect.append(subj.lemma + "subjlem")
-		fvect.append(str(subj.noun_person()) + "subj")
-		fvect.append(str(subj.singular_noun()) + "subj")
-		fvect.append(self.sentence.get_det(subj.tid) + "det")
-		fvect.append(str(self.sentence.ispassive()) + "passive")
-		fvect.append(str(leftnoun.noun_person()) + "leftn")
-		fvect.append(str(rightnoun.noun_person()) + "rightn")
-		fvect.append(leftnoun.pos + "leftn")
-		fvect.append(rightnoun.pos + "rightn")
-		fvect.append(gov_token.word + "gov")
-		fvect.append(gov_token.pos + "gov")
-		fvect.append(gov_tuple[0] + "govrel")
-		fvect.append(governee_token.word + "governee")
-		fvect.append(governee_token.pos + "governee")
-		fvect.append(governee_tuple[0] + "governeerel")
-		fvect.append(time_adverb(self.instance.last(), self.sentence, False).word + "tadverbright")
-		fvect.append(time_adverb(self.instance.first(), self.sentence, True).word + "tadverbleft")
-
-		if get_aspect(self.instance):
-			fvect.append(get_aspect(self.instance)) #label
-		else:
-			fvect.append('ERROR')
-		return fvect
-
-
-	def create_fvect2(self):	
-		"""
-			Helping method which creates the final feature vector 
-			for the instance, the feature are currently:
-			lemma of instance
-			lemma of word right/left of instance
-			subject of sentence
-			pos/person/det of subject
-			does sentence have passive construct?
-			left/right noun person/lemma/pos
-			is instance first/last in chain?
-			lemma/pos/relation of governor of instance
-			lemma/pos/relation of governee of instance
-		"""
-		fvect = []
-		#extract data needed for features
-		subj = self.sentence.get_subject_token()[0]
-		left = self.sentence.get_token(self.instance.first().tid - 1)
-		left2 = self.sentence.get_token(self.instance.first().tid - 2)
-		left3 = self.sentence.get_token(self.instance.last().tid - 3)
-		left4 = self.sentence.get_token(self.instance.last().tid - 4)
-		right = self.sentence.get_token(self.instance.last().tid + 1)
-		right2 = self.sentence.get_token(self.instance.last().tid + 2)
-		right3 = self.sentence.get_token(self.instance.last().tid + 3)
-		right4 = self.sentence.get_token(self.instance.last().tid + 4)
-		leftnoun = closest_noun(self.instance.first(), self.sentence, True)
-		rightnoun = closest_noun(self.instance.last(), self.sentence, False)
-		gov_tuple = self.sentence.get_gov(self.instance.head().tid)
-		gov_token = self.sentence.get_token(gov_tuple[1])
-		governee_list = self.sentence.get_governees(self.instance.head().tid)
-		governee_tuple = governee_list[0]
-		governee_token = self.sentence.get_token(governee_tuple[1])
-	
 		vnet_classes = verbnet.classids(self.instance.head().lemma)
 		if not vnet_classes:
-			vnet_class = 'NoClass'
+			vnet_class = []
 		else:
-			vnet_class = vnet_classes[0]
-			vnet_class = "".join([x for x in vnet_class if str.isalpha(x)])
+			vnet_class = ["".join([x for x in classes if str.isalpha(x)]) for classes in vnet_classes]
+			vnet_class = [x + "class" for x in vnet_class]
 
-		prevphrase = prev_vphrase(self.instance, self.sentence)
 		if prevphrase:
 			prevhead = prevphrase.head()
 			c = verbnet.classids(prevhead.lemma)
 			if not c:	
-				prevclass = 'NoPrevClass'
+#				prevclass = 'NoPrevClass' 
+				prevclass = None 
 			else:
 				prevclass = c[0] 
+				prevclass = "".join([x for x in prevclass if str.isalpha(x)])
 			prevaspect = get_aspect(prevphrase)
 		else:
-			prevhead = NullToken()
-			prevclass = 'NoPrevClass'
-			prevaspect = 'NoPrevAspect'
+			prevhead = None
+			prevclass = None  
+			prevaspect = None
 
-		fvect.append(self.instance.head().word + "self")
-		fvect.append(vnet_class + "class")
-#		fvect.append(chr(self.instance.length + 65) + "len")
-		fvect.append(right.word + "right")
-		fvect.append(left.word + "left")
-		fvect.append(right.pos + "right")
-		fvect.append(left.pos + "left")
+		fvect.append(self.instance.head().abbv_to_word() + "self")
+
+		if prevhead:	
+			fvect.append(prevhead.abbv_to_word() + "prevword")
+			fvect.append(prevhead.pos + "prevpos")
+#		if prevclass:
+#			fvect.append(prevclass + "prevclass")
+		if prevaspect:
+			fvect.append(prevaspect + "prevaspect")
 
 		fvect.append(right2.word + "right")
 		fvect.append(left2.word + "left")
@@ -504,29 +424,35 @@ class Features:
 		fvect.append(right4.pos + "right")
 		fvect.append(left4.pos + "left")
 
-		fvect.append(prevhead.lemma + "prevword")
-		fvect.append(prevhead.pos + "prevpos")
-#		fvect.append(prevclass)
-		fvect.append(prevaspect + "prevaspect")
-
+		fvect.append(right.abbv_to_word() + "right")
+		fvect.append(right.pos + "right")
+		fvect.append(left.abbv_to_word() + "left")
+		fvect.append(left.pos + "left")
 		fvect.append(subj.pos + "subj")
-		fvect.append(subj.word + "subjword")
+		fvect.append(subj.abbv_to_word() + "subjlem")
 		fvect.append(str(subj.noun_person()) + "subj")
-#		fvect.append(str(subj.singular_noun()) + "subj")
-		fvect.append(self.sentence.get_det(subj.tid) + "det")
+		fvect.append(str(subj.singular_noun()) + "subj")
+		#if det.isvalid():
+		fvect.append(det.word + "det")
 		fvect.append(str(self.sentence.ispassive()) + "passive")
-#		fvect.append(str(leftnoun.noun_person()) + "leftn")
-#		fvect.append(str(rightnoun.noun_person()) + "rightn")
-#		fvect.append(leftnoun.pos + "leftn")
-#		fvect.append(rightnoun.pos + "rightn")
+		fvect.append(str(leftnoun.noun_person()) + "leftn")
+		fvect.append(str(rightnoun.noun_person()) + "rightn")
+		fvect.append(leftnoun.pos + "leftn")
+		fvect.append(rightnoun.pos + "rightn")
+#		fvect.extend(governee_rels)
+#		fvect.extend(governees)
+#		fvect.extend(governeespos)
+
 		fvect.append(gov_token.word + "gov")
 		fvect.append(gov_token.pos + "gov")
 		fvect.append(gov_tuple[0] + "govrel")
 		fvect.append(governee_token.word + "governee")
 		fvect.append(governee_token.pos + "governee")
 		fvect.append(governee_tuple[0] + "governeerel")
-#		fvect.append(time_adverb(self.instance.last(), self.sentence, False).word + "tadverbright")
-#		fvect.append(time_adverb(self.instance.first(), self.sentence, True).word + "tadverbleft")
+		if ladv.isvalid():
+			fvect.append(ladv.word + "adverb")
+		if radv.isvalid():
+			fvect.append(radv.word + "adverb")
 
 		if get_aspect(self.instance):
 			fvect.append(get_aspect(self.instance)) #label
@@ -760,6 +686,27 @@ class Sentence:
 				subs.append(i.dependent_id())
 		return list(subs)
 
+	def get_token_left(self, tid):
+		curr = tid
+		while curr > 0:
+			tok = self.get_token(curr - 1)
+			if tok.word not in string.punctuation:
+				return tok
+			else:
+				curr = curr - 1
+		return NullToken()
+
+	def get_token_right(self, tid):
+		curr = tid
+		while curr < len(self.sen):
+			tok = self.get_token(curr + 1)
+			if tok.word not in string.punctuation:
+				return tok
+			else:
+				curr = curr + 1
+		return NullToken()
+	
+		
 	def ispassive(self):
 		"""return true if there is a passive contruct in sentence"""
 		p = False	
@@ -814,12 +761,11 @@ class Sentence:
 		return False
 
 	def get_det(self, token_index):
-		"""Return the determiner (surface form) for the token with given index,
-			else return False"""
+		"""Return the determiner (surface form) for the token with given index"""
 		for i in self.deps:
 			if i.dtype == 'det' and i.gov_id() == token_index:
-				return i.dependent_word()
-		return 'None'
+				return self.get_token(i.dependent_id())
+		return NullToken() 
 	
 	def add_pair(self, pair):
 		"""Add a correction pair to the sentence's corr_pairs list

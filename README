@@ -1,11 +1,25 @@
-The entire pipeline consists of the following steps:
-1. use the 'run_pipeline.sh <filename>' script to run the Stanford CoreNLP pipeline 
-	on a data file to produce an annotated xml file.
-2. use the python script, 'python process_data.py <filename.xml> <mallet_data_file>' to
-	produce data that can be read by Mallet
-3. use the 'train_crf.sh <crf_file> <mallet_data_file>' to train the crf with Mallet
-4. use the 'test_crf.sh <crf_file> <test_mallet_data_file>' to test the crf with test data
-5. (optional) run sed 's/[A-Z]*\[[a-z]*\]$//' <mallet_data_file> to remove the
-	label in the test data for testing
+#############################################
+	Verb Checker
+	Framework for handling data in order to allow
+	the testing of various automated verb error 
+	checking methods using Mallet classifiers
+	
+	Author: Noah Weber
+	Email: webern2@winthrop.edu
+#############################################
+Dependencies:
+	-Mallet library is installed
+	-Nltk along with the verbnet package is installed
+	-FCE corpus is downloaded
 
+Handling FCE data:
+	-Before running program concat all FCE xml files into one
+	large xml file (and use sed or something to make this into
+	valid xml).
+	-Then split this data into testing and training sets (~0.9 training to testing proportion is fine now)
+	-Use python process_fce_data.py fcexmlfile.xml trainout trainout_delim to get fce text data and delimited fce text data
+	-Then use the annotate_text.sh script to pos tag both the fce text data file and the delimited fce data
+Use the prep_data script to run through data preperation pipeline
+Use run-classifier script to run the classifier and use eval_results.py to evaluate the results of the classifier
 
+Send questions and complaints to webern2@winthrop.edu

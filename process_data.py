@@ -1,4 +1,6 @@
 ##########################################################
+#			process_data
+#		Author: Noah Weber
 #     Script to read relevent information from the output
 #     of the Stanford Core NLP Annotator Program
 #	  and then parse features from the data in order to generate
@@ -13,10 +15,12 @@ import pickle
 def read_xml(filename, getdeps=True, check=True):
 	"""Parse the xml output from filename made by the Stanford Core NLP Annotators
 		and extract syntatic and dependecy features 
-		@params: String filename,
+		@params:
+				String filename,
 				bool deps - whether to include dependencies
 				bool check - if true, double check if verb is incorrectly tagged as something else 
-		@ret: A list of Sentence objects storing each sentence in the file
+		@ret: 
+			A list of Sentence objects storing each sentence in the file
 	"""
 	sents = []
 	xfile = open(filename, 'r')
@@ -61,11 +65,13 @@ def read_delimited_xml(filename, del_filename, getdeps=True, check=True):
 	"""Read xml with delimiters around verb phrase. Need to process a
 		file without delimiters so the Stanford parser does not get confused by the delimiters.
 		File with correction delimiters is should be pos tagged, does not need dep parsing
-		@params: String filename - name of file with non delimited pos tagged data and dependency parse (xml output from Stanford tagger/parser),
+		@params: 
+				String filename - name of file with non delimited pos tagged data and dependency parse (xml output from Stanford tagger/parser),
 				 String del_filename - name of file with pos tagged data (xml output from Stanford tagger)
    				 bool deps - whether to include dependencies
 				 bool check - if true, double check if verb is incorrectly tagged as something else 
-		@ret: A list of Sentence objects storing each sentence in the file, with delimiters included
+		@ret: 
+			A list of Sentence objects storing each sentence in the file, with delimiters included
 	"""
 	sents = []
 	xfile = open(filename, 'r')
@@ -142,6 +148,7 @@ def read_delimited_xml(filename, del_filename, getdeps=True, check=True):
 	xfile.close()
 	return sents
 
+#Keep this around just in case, we dont really need it however
 def create_crf_data(sents, filename='data_mallet.txt', unlabeled=False, labels_file=None, corrs=False):
 	"""Write a data file that can be used for training or testing CRFs in Mallet. The data is written 
 		in the following form:
@@ -191,6 +198,7 @@ def in_verblist(lem):
 	else:
 		return False
 
+#dont really need this anymore, keep around just incase
 def write_all_instances(sents, filename, labels_file=None):
 	"""Write a instance file representation in a form that can be
 		read by Mallet's Csv2Vectors script (this converts the data into binary form for Mallet's classifiers)
@@ -201,7 +209,7 @@ def write_all_instances(sents, filename, labels_file=None):
 		@params:
 			list of Sentences sents - the data created from read_xml() 
 			string filename - file to write to 
-			labels_file - Whether to print the labels to a seperate file (rather than including them in instance file)
+			labels_file - File to print labels to (include them in instance file if no label file provided)
 	"""
 	outfile = open(filename, 'w')
 	if labels_file:
@@ -224,30 +232,17 @@ def write_all_instances(sents, filename, labels_file=None):
 	if labels_file:
 		lfile.close()
 
-def create_corr_train_data(sents, filename):
-	outfile = open(filename, 'w')
-	name = 0 #for instance names just give unique number starting at 0
-	for s in sents:
-		corr_stack = list(s.corr_pairs)
-		corr_stack.reverse()
-		for c in s.get_vchains():
-			if any(x.in_delim for x in c.chain) and corr_stack: #if verb phrase is an error use the correct label
-				feats = CorrectionFeatures(corr_stack.pop(), s)
-			else:
-				feats = CorrectionFeatures(CorrectionPair(c, c), s)
-			label = feats.fvect.pop() 
-			if label != 'ERROR': #for now, ignore data too malformed to get all features for
-				str_feats = " ".join([str(x) for x in feats.fvect])
-				outfile.write("{} {} {}\n".format(name, label, str_feats))
-				name = name + 1
-	outfile.close()
-
-def write_clean_instances(sents, filename, labels_file=None, corr=False):
-	"""Get cleaned instance data needed for testing/training. The difference between this and all_instance_data() is 
+def write_clean_instances(sents, filename, labels_file=None, corr=True):
+	"""Get cleaned instance data needed for training. The difference between this and all_instance_data() is 
 		that this method only includes instances that do not have a label that equals ERROR for both its
 		corresponding Features and CorrectionFeatures object (this ensures that we can correctly analyze 
 		the quality of our results)  
 		Use this method to get regular instance data for testing or correction instance data for training
+		@params:
+			list of Sentences sents - the data created from read_xml() 
+			string filename - file to write to 
+			labels_file - File to print labels to (include them in instance file if no label file provided)
+			bool corr - whether or not to use CorrectionFeatures or regular Features
 	"""
 	if labels_file:
 		lfile = open(labels_file, 'w')
@@ -269,26 +264,29 @@ def write_clean_instances(sents, filename, labels_file=None, corr=False):
 	if labels_file:
 		lfile.close()
 
-def create_corr_data(sents, filename, labels_file):
+def write_testing_instances(sents, filename, labels_file, orig_file):
 	"""Create correction instance data for testing, puts all CorrectionFeature instances
-		in one file, with the correct labels in another file, use these as the gold label set
-		for testing
+		in one file (without labels), with the correct labels in another file (use these as the gold label set
+		for testing), and the original labels in another file
+		@params:
+			list of Sentences sents - the data created from read_xml() 
+			string filename - file to write to 
+			labels_file - File to print labels to 
+			orig_file - File to print original labels to 
 	"""
 	lfile = open(labels_file, 'w')
+	ofile = open(orig_file, 'w')
 	outfile = open(filename, 'w')
 	name = 0 #for instance names just give unique number starting at 0
 	for s in sents:
 		flist = s.get_feats(True) #list of all CorrectionFeatures in sentence
 		for feats in flist:
-#			correction = feats.fvect[0][:len(feats.fvect[0]) - 10]
 			correction = feats.fvect.pop()
-#			label = feats.fvect.pop()
-			label = feats.fvect[0][:len(feats.fvect[0]) - 10]
 			if correction != 'ERROR':
-#			if label != 'ERROR':
-				str_feats = " ".join([str(x) for x in feats.fvect[1:]])  #get all features except correction/error
+				str_feats = " ".join([str(x) for x in feats.fvect])  #get all features
 				outfile.write("{} {}\n".format(name, str_feats))
 				lfile.write("{}\n".format(correction))	
+				ofile.write("{}\n".format(feats.fvect[0][:len(feats.fvect[0])-10]))
 			name = name + 1
 	outfile.close()
 	lfile.close()
@@ -310,27 +308,20 @@ if __name__ == "__main__":
 			outfile = sys.argv[3]
 			sents = read_xml(inxml)
 			pickle.dump(sents, open(outfile, 'wb'))
-	elif arg == 'testing': #create Features instance data with labels in seperate file for testing (use testout_delim.p for sent data)
-	#ARGS testing outfile.in origlabels sentfile.p 
-		outfile = sys.argv[2]
-		labelfile = sys.argv[3]
-		sentfile = sys.argv[4] #make pickle file last arg
-		sents = pickle.load(open(sentfile, 'rb'))
-		write_clean_instances(sents, outfile, labelfile, False)
-	elif arg == 'corr-train': #create CorrectionFeatures instance data for correction model training from error delimed data
+	elif arg == 'training': #create CorrectionFeatures instance data for correction model training from error delimed data
 	#ARGS corr-train outfile.in sentfile.p 
 		outfile = sys.argv[2]
 		sentfile = sys.argv[3] #make pickle file last arg
 		sents = pickle.load(open(sentfile, 'rb'))
 		write_clean_instances(sents, outfile, None, True)
-#		create_corr_train_data(sents, outfile)
-	elif arg == 'gold': #create CorrectionFeatures instance data for testing, along with gold labels
+	elif arg == 'testing': #create CorrectionFeatures instance data for testing, along with gold labels and original labels
 	#ARGS gold outfile.in corrlabels sentfile.p	
 		outfile = sys.argv[2]
 		labelfile = sys.argv[3]
-		sentfile = sys.argv[4]
+		origfile = sys.argv[4]
+		sentfile = sys.argv[5]
 		sents = pickle.load(open(sentfile, 'rb'))
-		create_corr_data(sents, outfile, labelfile)
+		write_testing_instances(sents, outfile, labelfile, origfile)
 	#ARGS outfile.in sentfile.p 
 	else:  #get all instance data for language model training
 		outfile = sys.argv[1] 
@@ -339,20 +330,3 @@ if __name__ == "__main__":
 		write_all_instances(sents, outfile)
 
 	print("done")
-		
-
-
-#	infile = sys.argv[1]
-#	delimfile = sys.argv[2]
-#	outfile = sys.argv[3]
-#	sents = read_xml(infile)
-#	sents = read_delimited_xml(infile, delimfile)
-
-#	if len(sys.argv) > 3:
-#		#create_instance_data(sents, outfile, sys.argv[3]) #create origianl label file
-#		create_instance_data(sents, outfile, sys.argv[3], True) #create origianl label file
-#	else:
-		#create_instance_data(sents, outfile)
-
-#	create_instance_data(sents, outfile)
-#	create_instance_data(sents, outfile, None, True)
