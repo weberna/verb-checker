@@ -19,7 +19,7 @@ class Token:
 
 	def singular_noun(self):
 		"""Return whether Token is singular or plural noun"""
-		if self.pos == 'NNS' or self.pos == 'NNPS' or self.word in ['we', 'they']:
+		if self.pos == 'NNS' or self.pos == 'NNPS' or self.word in ['we', 'they', 'us', 'them']:
 			return False
 		else:
 			return True
@@ -29,12 +29,20 @@ class Token:
 			return a string from the set {3rdSingular, Plural, 1stSingular}
 			else return false if not a noun
 		"""
-		if self.word == 'i' or self.word == 'I':
-			return 'FirstSingular'
-		elif self.pos == 'NN' or self.pos == 'NNP' or self.word.lower() in ['he', 'she', 'it']:
-			return 'ThirdSingular'
-		elif self.pos == 'NNS' or self.pos == 'NNPS' or self.word.lower() in ['we', 'you', 'they']:
-			return 'Plural'
+		if self.word.lower() == 'i' or self.word.lower() == 'me':
+#			return 'FirstSingular'
+			return 'FirstPerson'
+		elif self.pos == 'NN' or self.pos == 'NNP' or self.word.lower() in ['he', 'she', 'it', 'him', 'her']:
+#			return 'ThirdSingular'
+			return 'ThirdPerson'
+		elif self.word.lower() in ['we', 'us']:
+#			return 'FirstPlural'
+			return 'FirstPerson'
+		elif self.word.lower() in ['they', 'them'] or self.pos == 'NNS' or self.pos == 'NNPS':
+#			return 'ThirdPlural'
+			return 'ThirdPerson'
+		elif self.word.lower() == 'you':
+			return 'SecondPerson'
 		else:
 			return False
 
@@ -202,15 +210,6 @@ class CorrectionFeatures:
 		"""
 			Helping method which creates the final feature vector 
 			for the instance, the feature are currently:
-			lemma of instance
-			lemma of word right/left of instance
-			subject of sentence
-			pos/person/det of subject
-			does sentence have passive construct?
-			left/right noun person/lemma/pos
-			is instance first/last in chain?
-			lemma/pos/relation of governor of instance
-			lemma/pos/relation of governee of instance
 		"""
 		fvect = []
 		corr = self.instance.correction
@@ -280,10 +279,10 @@ class CorrectionFeatures:
 		if prevaspect:
 			fvect.append(prevaspect + "prevaspect")
 
-#		fvect.append(right2.word + "right")
-#		fvect.append(left2.word + "left")
-#		fvect.append(right2.pos + "right")
-#		fvect.append(left2.pos + "left")
+#		fvect.append(right2.abbv_to_word())
+#		fvect.append(left2.abbv_to_word())
+#		fvect.append(right2.pos)
+#		fvect.append(left2.pos)
 
 #		fvect.append(right3.word + "right")
 #		fvect.append(left3.word + "left")
@@ -299,16 +298,24 @@ class CorrectionFeatures:
 		fvect.append(right.pos + "right")
 		fvect.append(left.abbv_to_word() + "left")
 		fvect.append(left.pos + "left")
+
+
 		fvect.append(subj.pos + "subj")
 		fvect.append(subj.abbv_to_word() + "subjlem")
 		fvect.append(str(subj.noun_person()) + "subj")
 		fvect.append(str(subj.singular_noun()) + "subj")
-		fvect.append(det.word + "det")
+#		fvect.append(det.word + "det")
 		fvect.append(str(self.sentence.ispassive()) + "passive")
-		fvect.append(str(leftnoun.noun_person()) + "leftn")
-		fvect.append(str(rightnoun.noun_person()) + "rightn")
-		fvect.append(leftnoun.pos + "leftn")
-		fvect.append(rightnoun.pos + "rightn")
+#		if leftnoun.isvalid():
+#			fvect.append(str(leftnoun.singular_noun()) + "leftn")
+#			fvect.append(str(leftnoun.noun_person()) + "leftn")
+#		fvect.append(leftnoun.pos + "leftn")
+#			fvect.append(leftnoun.abbv_to_word() + "leftn")
+#		if rightnoun.isvalid():
+#			fvect.append(str(rightnoun.noun_person()) + "rightn")
+#			fvect.append(str(rightnoun.singular_noun()) + "rightn")
+#		fvect.append(rightnoun.pos + "rightn")
+#			fvect.append(rightnoun.abbv_to_word() + "rightn")
 #		fvect.extend(governee_rels)
 #		fvect.extend(governees)
 #		fvect.extend(governeespos)
@@ -576,7 +583,8 @@ def closest_noun(tok, sentence, left=False):
 		index = index - 1
 		while not (index < 0):
 			temptok = sentence.get_token(index)
-			if temptok.pos[0] == 'N':
+			#if temptok.pos[0] == 'N':
+			if temptok.pos[0] == 'N' or temptok.pos == 'PRP' or temptok.pos == 'PRP$':
 				closest_tok = temptok
 				break
 			index = index - 1
@@ -584,7 +592,8 @@ def closest_noun(tok, sentence, left=False):
 		index = index + 1
 		while not (index > len(sentence.sen)):
 			temptok = sentence.get_token(index)
-			if temptok.pos[0] == 'N':
+			#if temptok.pos[0] == 'N':
+			if temptok.pos[0] == 'N' or temptok.pos == 'PRP' or temptok.pos == 'PRP$':
 				closest_tok = temptok
 				break
 			index = index + 1

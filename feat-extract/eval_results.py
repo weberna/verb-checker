@@ -45,7 +45,7 @@ def fix_tags(method, gold, orig):
 				for k in j:
 					k.pos = 'VB'  #mark all 3 words as verbs (at this point, the exact pos tag is irrelevent, so just mark as arbitrary VB)
 
-def get_hit_stats(method_lab, gold_lab, orig_lab):
+def get_hit_stats(method_lab, gold_lab, orig_lab, false_neg_file=None):
 	"""Take in the results of the classifier, the golden results, and the original results
 		and return relevent hit statistics.
 		Label files must be correctly aligned for this to work!
@@ -57,6 +57,8 @@ def get_hit_stats(method_lab, gold_lab, orig_lab):
 			a tuple - (true_pos, false_pos, inv_pos, false_neg)
 	"""
 
+	if false_neg_file:
+		f = open(false_neg_file, 'w')
 	true_pos = 0
 	false_pos = 0
 	inv_pos = 0
@@ -69,6 +71,8 @@ def get_hit_stats(method_lab, gold_lab, orig_lab):
 			elif method_lab[i] == orig_lab[i]:  #did not detect error
 				print("FalseNeg: {} {} {}".format(method_lab[i], gold_lab[i], orig_lab[i]))
 				false_neg = false_neg + 1
+				if false_neg_file:
+					f.write(("{} {} {}\n".format(i, method_lab[i], gold_lab[i])))
 			else:						#fixed error incorrectly
 				inv_pos = inv_pos + 1
 				print("InvPos: {} {} {}".format(method_lab[i], gold_lab[i], orig_lab[i]))
@@ -78,7 +82,18 @@ def get_hit_stats(method_lab, gold_lab, orig_lab):
 
 	return (true_pos, false_pos, inv_pos, false_neg)
 
-def evaluate(method_out, gold_out, orig_out):
+def find_false_instances(fneg_file, inst_file, out_file):
+	ifile = open(inst_file, 'r')
+	fnegfile = open(fneg_file, 'r')
+	outfile = open(out_file, 'w')
+	instances = [x.strip('\n') for x in ifile.readlines()]
+	fneg_names = [x.strip('\n') for x in fnegfile.readlines()]
+	for i in fneg_names:
+		inst_data = i.split(None, 1)
+		index = inst_data[0]
+		outfile.write("{} {}\n".format(instances[int(index)], inst_data[1]))
+
+def evaluate(method_out, gold_out, orig_out, get_fnegs=False):
 	"""Evaluate the results of the method against gold standard
 		@params:
 			filename method_out - output labels from method
@@ -94,9 +109,11 @@ def evaluate(method_out, gold_out, orig_out):
 	gold_labs = [x.strip('\n') for x in gf.readlines()]
 	orig_labs = [x.strip('\n') for x in of.readlines()]
 
-	stats = get_hit_stats(method_labs, gold_labs, orig_labs)
+	if get_fnegs:
+		stats = get_hit_stats(method_labs, gold_labs, orig_labs, 'false_negs')
+	else:
+		stats = get_hit_stats(method_labs, gold_labs, orig_labs)
 	print("Final Stats: {} {} {} {}".format(stats[0],stats[1],stats[2],stats[3]))
-
 	if stats:
 		prec = (stats[0] + stats[2]) / (stats[0] + stats[2] + stats[1])
 		recall = stats[0] / (stats[0] + stats[2] + stats[3])
@@ -106,12 +123,18 @@ def evaluate(method_out, gold_out, orig_out):
 
 if __name__ == "__main__":
 	#ARGS: eval_results.py method-out gold-out orig-out
-	method = sys.argv[1]	
-	gold = sys.argv[2]
-	orig = sys.argv[3]
-	results = evaluate(method, gold, orig)
-	print("Precision: {}".format(results[0]))
-	print("Recall: {}".format(results[1]))
+	if sys.argv[1] == 'fneg':
+		inst = sys.argv[2]
+		fneg = 'false_negs'
+		out = sys.argv[3]
+		find_false_instances(fneg, inst, out)	
+	else:
+		method = sys.argv[1]	
+		gold = sys.argv[2]
+		orig = sys.argv[3]
+		results = evaluate(method, gold, orig, get_fnegs=True)
+		print("Precision: {}".format(results[0]))
+		print("Recall: {}".format(results[1]))
 
 
 		

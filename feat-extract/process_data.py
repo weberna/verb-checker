@@ -1,5 +1,5 @@
 ##########################################################
-#			process_data
+#			process_data 
 #		Author: Noah Weber
 #     Script to read relevent information from the output
 #     of the Stanford Core NLP Annotator Program
@@ -287,7 +287,7 @@ def write_testing_instances(sents, filename, labels_file, orig_file):
 				outfile.write("{} {}\n".format(name, str_feats))
 				lfile.write("{}\n".format(correction))	
 				ofile.write("{}\n".format(feats.fvect[0][:len(feats.fvect[0])-10]))
-			name = name + 1
+				name = name + 1
 	outfile.close()
 	lfile.close()
 

@@ -13,6 +13,7 @@ fce-released-dataset/
 mallet/
 mallet-src/
 MASC-3.0.0/
+MALSAR/
 stanford-corenlp/
 *.p
 view_crf.sh
@@ -21,5 +22,10 @@ VerbTagger*
 annotate_pos.sh
 run_crf.sh
 train_crf.sh
+mallet
+classifier
+mallet-src
+miscdata
+data
 README_VerbChanger
 
