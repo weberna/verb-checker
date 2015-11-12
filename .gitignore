@@ -7,7 +7,7 @@ brown*
 *.xml
 *.txt
 *.mallet
-_pycache_/
+__pycache__/
 acl-arc/
 fce-released-dataset/
 mallet/

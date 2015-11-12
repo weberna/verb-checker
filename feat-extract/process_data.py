@@ -147,48 +147,7 @@ def read_delimited_xml(filename, del_filename, getdeps=True, check=True):
 		sents.append(sen_data)
 	xfile.close()
 	return sents
-
-#Keep this around just in case, we dont really need it however
-def create_crf_data(sents, filename='data_mallet.txt', unlabeled=False, labels_file=None, corrs=False):
-	"""Write a data file that can be used for training or testing CRFs in Mallet. The data is written 
-		in the following form:
-		<feature> <feature> ... <label>
-		A newline seperates different sequences
-		@params:
-			list of Sentences sents - the data created from read_xml()
-			string filename - file to write to 
-	"""
-	outfile = open(filename, 'w')
-	if labels_file:
-		lfile = open(labels_file, 'w')
-	for s in sents:
-		corrected = False
-		if corrs:
-			for pair in s.corr_pairs:
-				feats = CorrectionFeatures(pair, s)
-				if unlabeled:
-					lab = feats.fvect.pop() #get rid of label
-					if labels_file:  #write the label to the seperate label file
-						lfile.write("{}\n".format(lab))	
-				str_feats = " ".join([str(x) for x in feats.fvect])
-				outfile.write("{}\n".format(str_feats))
-				corrected = True
-		else:
-			for chain in s.get_vchains():
-				feats = Features(chain, s)
-				if feats.fvect[len(feats.fvect) - 1] != 'ERROR':
-					if unlabeled:
-						lab = feats.fvect.pop() #get rid of label
-						if labels_file:  #write the label to the seperate label file
-							lfile.write("{}\n".format(lab))	
-					str_feats = " ".join([str(x) for x in feats.fvect])
-					outfile.write("{}\n".format(str_feats))
-					corrected = True 
-		if corrected:
-			outfile.write("\n")
-			if labels_file:
-				lfile.write("\n")
-	outfile.close()
+#end bananna 
 
 def in_verblist(lem):
 	"""Return true if the given lemma is found in the verbnet verb list"""
@@ -198,51 +157,17 @@ def in_verblist(lem):
 	else:
 		return False
 
-#dont really need this anymore, keep around just incase
-def write_all_instances(sents, filename, labels_file=None):
-	"""Write a instance file representation in a form that can be
-		read by Mallet's Csv2Vectors script (this converts the data into binary form for Mallet's classifiers)
-		Data form:
-			<instance name> <label> <feature> ...
-		This gets all verb chain instances, use this for gathering instance data for language model, not for correction
-		model
-		@params:
-			list of Sentences sents - the data created from read_xml() 
-			string filename - file to write to 
-			labels_file - File to print labels to (include them in instance file if no label file provided)
-	"""
-	outfile = open(filename, 'w')
-	if labels_file:
-		lfile = open(labels_file, 'w')
-	name = 0 #for instance names just give unique number starting at 0
-	for s in sents:
-		li = s.get_vchains()
-		for i in li:
-			feats = Features(i, s)
-			label = feats.fvect.pop() 
-			if label != 'ERROR': #for now, ignore data too malformed to get all features for
-				str_feats = " ".join([str(x) for x in feats.fvect])
-				if labels_file:  #write the label to the seperate label file
-					lfile.write("{}\n".format(label))	
-					outfile.write("{} {}\n".format(name, str_feats))
-				else:
-					outfile.write("{} {} {}\n".format(name, label, str_feats))
-				name = name + 1
-	outfile.close()
-	if labels_file:
-		lfile.close()
-
 def write_clean_instances(sents, filename, labels_file=None, corr=True):
 	"""Get cleaned instance data needed for training. The difference between this and all_instance_data() is 
 		that this method only includes instances that do not have a label that equals ERROR for both its
 		corresponding Features and CorrectionFeatures object (this ensures that we can correctly analyze 
 		the quality of our results)  
-		Use this method to get regular instance data for testing or correction instance data for training
+		Use this method to instance data for training
 		@params:
 			list of Sentences sents - the data created from read_xml() 
 			string filename - file to write to 
 			labels_file - File to print labels to (include them in instance file if no label file provided)
-			bool corr - whether or not to use CorrectionFeatures or regular Features
+			bool corr - whether or not to use CorrectionFeatures or regular Features 
 	"""
 	if labels_file:
 		lfile = open(labels_file, 'w')

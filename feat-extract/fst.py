@@ -12,7 +12,7 @@ class Fst:
 				list of lists transitions - ith row of the 2d array gives a list of transitions for the ith state, 
 										the jth element in this list gives the index of the state to transition 
 										to when the jth input symbol is read in, the last element is the 'empty' transistion
-										(can automatically transition with no input required, put 0 to indicate no 'empty' transition)
+										(can automatically transition with no input required, put 0 to indicate no 'empty' transition for that state)
 										Transitioning to state -1 indicates a state is transitioning to itself and that nothing should
 										be outputted on this transition.
 				list end_states - a list a state indices that are valid ending states, default to all states
@@ -72,8 +72,8 @@ class Fst:
 		else:
 			return ['ERROR']
 
-def aspect_transducer():
-	"""Return a transducer that takes in inputs of auxiliary verbs and form of main verb and outputs tense/aspect"""
+def vchain_transducer():
+	"""Return a transducer that takes in inputs of auxiliary verbs and form of main verb and outputs tense/aspect and person/number of the verb chain"""
 	#          0     1       2       3     4     5       6     7     8        9     10    11    12     13      14      15      
 	inputs = ['VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'had', 'have', 'has', 'is', 'am', 'are', 'was', 'were', 'been']
 
@@ -135,8 +135,8 @@ def aspect_transducer():
 	transducer = Fst(inputs, outputs, trans)				
 	return transducer
 
-def forgiving_aspect_transducer():
-	"""Just like regular aspect transducer but a little more forgiving (ie try to guess the tense/aspect if input is not entirly correct)"""
+def forgiving_vchain_transducer():
+	"""Just like regular vchain transducer but a little more forgiving (ie try to guess the tense/aspect if input is not entirly correct)"""
 	#          0     1       2       3     4     5       6     7     8        9     10    11    12     13      14      15     16    17     18
 	inputs = ['VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'had', 'have', 'has', 'is', 'am', 'are', 'was', 'were', 'been', 'do', 'did', 'does']
 
@@ -214,9 +214,10 @@ def forgiving_aspect_transducer():
 	transducer = Fst(inputs, outputs, trans, ends)				
 	return transducer
 
-def aspect_generator():
-	"""Return transducer which takes in as input a phrase and desired aspect and returns a modified version of the
-		phrase in the aspect desired"""
+def vchain_generator():
+	"""Return transducer which takes in as input a phrase and desired properties and returns a modified version of the
+		phrase in the tense/aspect/person/number desired"""
+    #Dont use this, not entirly correct
 	#          0        1       2           3       4       5            6           7                         8      9    
 	inputs = ['1ST', '3RD', 'SINGULAR', 'PLURAL', 'PAST', 'PRESENT', 'PERFECT', 'PERFECT PROGRESSIVE', 'PROGRESSIVE', '']
 	#           0        1    2      3       4         5       6       7   8        9   10    11     12     13     14    15      16    17
