@@ -197,21 +197,39 @@ class Dependency:
 
 class CorrectionFeatures:   
     'Creates and stores features for a verb phrase error and correction, can be used as a baseclass for other feature vectors'
-    def __init__(self, pair, s):
-        """@params: 
+    def __init__(self, createfrom, s):
+        """
+        CorrectionFeatures can be created from scratch (when createfrom is a CorrectionPair)
+        or can be created from an exsisting CorrectionFeature object (when createfrom is a CorrectionFeature)
+        @params: 
             CorrectionPair pair     
             Sentence s - the sentence in which verb appears in 
+
         """
-        self.sentence = s
-        self.instance = pair
-        self.fvect = self.create_fvect() #holds all features
-        self.target = self.get_target()  #target feature (label of instance)
-    def create_fvect(self): 
+        if isinstance(createfrom, CorrectionPair): #create from scratch
+            pair = createfrom
+            self.sentence = s
+            self.instance = pair
+            self.fvect = self.create_fvect() #holds all features
+            self.target = self.get_target()  #target feature (label of instance)
+        elif isinstance(createfrom, CorrectionFeatures):
+            self.sentence = createfrom.sentence
+            self.instance = createfrom.instance 
+            self.fvect = self.create_fvect(createfrom.fvect)
+            self.label = self.get_target()
+
+    def create_fvect(self, createfrom=None): 
         """
             adds features to feature vector, this function does not add labels, that is up to 
             classes that derive from the CorrectionFeatures class
+            @params
+                list createfrom - a feature vector list to base this feature vector on (append to createfrom)
         """
-        fvect = []
+        if createfrom:
+            fvect = createfrom
+        else:
+            fvect = []
+
         corr = self.instance.correction
         error = self.instance.error
         #extract data needed for features
@@ -345,28 +363,23 @@ class AspectFeatures(CorrectionFeatures):
         AspectFeatures can be created from scratch (when createfrom is a CorrectionPair)
         or can be created from an exsisting CorrectionFeature object (when createfrom is a CorrectionFeature)
         """
-        if isinstance(createfrom, CorrectionPair): #create from scratch
-            CorrectionFeatures.__init__(self, createfrom, s)
-        elif isinstance(createfrom, CorrectionFeatures):
-            self.sentence = createfrom.sentence
-            self.instance = createfrom.instance 
-            self.fvect = createfrom.fvect
-            self.fvect.append(get_vchain_labels(self.instance.error)[0] + "origLabel")
-            self.label = self.get_target()
+        CorrectionFeatures.__init__(self, createfrom, s)
 
-    def create_fvect(self): 
-        fvect = CorrectionFeatures.create_fvect(self) 
+    def create_fvect(self, createfrom=None): 
+        if createfrom:
+            fvect = createfrom
+        else: 
+            fvect = CorrectionFeatures.create_fvect(self) 
 
-        #put original verb phrase aspect down as feature
-        fvect.append(get_vchain_labels(self.instance.error)[0] + "origLabel")
-
+        fvect.append(get_vchain_labels(self.instance.error)[0] + "origLabel") #put original verb phrase aspect down as feature
         return fvect
 
     def get_target(self):
         #insert label at end
         err_label = get_vchain_labels(self.instance.error)[0]
         corr_label = get_vchain_labels(self.instance.correction)[0]
-        if err_label != 'ERROR': #only use instance where both orig and correction aspect != error
+        #if err_label and err_label != 'ERROR' and not err_label.isspace():
+        if valid_label(err_label) and valid_label(corr_label):
            return corr_label #label
         else:
             return 'ERROR'
@@ -378,29 +391,23 @@ class PersonNumFeatures(CorrectionFeatures):
         PersonNumFeatures can be created from scratch (when createfrom is a CorrectionPair)
         or can be created from an exsisting CorrectionFeature object (when createfrom is a CorrectionFeature)
         """
-        if isinstance(createfrom, CorrectionPair): #create from scratch
-            CorrectionFeatures.__init__(self, createfrom, s)
-        elif isinstance(createfrom, CorrectionFeatures):
-            self.sentence = createfrom.sentence
-            self.instance = createfrom.instance 
-            self.fvect = createfrom.fvect
-            fvect.append(get_vchain_labels(self.instance.error)[1] + "origLabel")
-            self.label = self.get_target()
+        CorrectionFeatures.__init__(self, createfrom, s)
 
+    def create_fvect(self, createfrom=None): 
+        if createfrom:
+            fvect = createfrom
+        else: 
+            fvect = CorrectionFeatures.create_fvect(self) 
 
-    def create_fvect(self): 
-        fvect = CorrectionFeatures.create_fvect(self) 
-
-        #put original verb phrase person/number down as feature
-        fvect.append(get_vchain_labels(self.instance.error)[1] + "origLabel")
-
+        fvect.append(get_vchain_labels(self.instance.error)[1] + "origLabel") #put original verb phrase aspect down as feature
         return fvect
 
     def get_target(self):
         #insert label at end
         err_label = get_vchain_labels(self.instance.error)[1]
         corr_label = get_vchain_labels(self.instance.correction)[1]
-        if err_label != 'ERROR': #only use instance where both orig and correction label != error
+        #if err_label and err_label != 'ERROR' and not err_label.isspace():
+        if valid_label(err_label) and valid_label(corr_label):
            return corr_label #label
         else:
             return 'ERROR'
@@ -431,6 +438,13 @@ def get_aspect(vseq):
             
             aspect = "_".join(aspect_list)
     return aspect
+
+def valid_label(label):
+    """Return true if string label is valid (not empty of full of spaces or equal to ERROR)"""
+    if label and label != 'ERROR' and not label.isspace():
+        return True
+    else:
+        return False
 
 def get_vchain_labels(vseq):
     """Get the labels for a verb chain. Labels are the tense/aspect, and person/number
