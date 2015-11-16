@@ -334,24 +334,74 @@ class CorrectionFeatures:
         return 'NO TARGET FEATURE'
     
         
+#ids for feature type so methods can indicate which type of features they want
+ASPECT_FEATS = 1
+PERSON_NUM_FEATS = 2
 
 class AspectFeatures(CorrectionFeatures):   
     'Feature vector where tense/aspect is used as a label'
-    def __init__(self, pair, s):
-        CorrectionFeatures.__init__(self, pair, s)
+    def __init__(self, createfrom, s):
+        """
+        AspectFeatures can be created from scratch (when createfrom is a CorrectionPair)
+        or can be created from an exsisting CorrectionFeature object (when createfrom is a CorrectionFeature)
+        """
+        if isinstance(createfrom, CorrectionPair): #create from scratch
+            CorrectionFeatures.__init__(self, createfrom, s)
+        elif isinstance(createfrom, CorrectionFeatures):
+            self.sentence = createfrom.sentence
+            self.instance = createfrom.instance 
+            self.fvect = createfrom.fvect
+            self.fvect.append(get_vchain_labels(self.instance.error)[0] + "origLabel")
+            self.label = self.get_target()
 
     def create_fvect(self): 
         fvect = CorrectionFeatures.create_fvect(self) 
 
         #put original verb phrase aspect down as feature
-        fvect.append(get_aspect(self.instance.error) + "origAspect")
+        fvect.append(get_vchain_labels(self.instance.error)[0] + "origLabel")
 
         return fvect
 
     def get_target(self):
         #insert label at end
-        if get_aspect(error) != 'ERROR': #only use instance where both orig and correction aspect != error
-           return get_aspect(self.instance.correction) #label
+        err_label = get_vchain_labels(self.instance.error)[0]
+        corr_label = get_vchain_labels(self.instance.correction)[0]
+        if err_label != 'ERROR': #only use instance where both orig and correction aspect != error
+           return corr_label #label
+        else:
+            return 'ERROR'
+
+class PersonNumFeatures(CorrectionFeatures):   
+    'Feature vector where person/number is used as a label'
+    def __init__(self, pair, s):
+        """
+        PersonNumFeatures can be created from scratch (when createfrom is a CorrectionPair)
+        or can be created from an exsisting CorrectionFeature object (when createfrom is a CorrectionFeature)
+        """
+        if isinstance(createfrom, CorrectionPair): #create from scratch
+            CorrectionFeatures.__init__(self, createfrom, s)
+        elif isinstance(createfrom, CorrectionFeatures):
+            self.sentence = createfrom.sentence
+            self.instance = createfrom.instance 
+            self.fvect = createfrom.fvect
+            fvect.append(get_vchain_labels(self.instance.error)[1] + "origLabel")
+            self.label = self.get_target()
+
+
+    def create_fvect(self): 
+        fvect = CorrectionFeatures.create_fvect(self) 
+
+        #put original verb phrase person/number down as feature
+        fvect.append(get_vchain_labels(self.instance.error)[1] + "origLabel")
+
+        return fvect
+
+    def get_target(self):
+        #insert label at end
+        err_label = get_vchain_labels(self.instance.error)[1]
+        corr_label = get_vchain_labels(self.instance.correction)[1]
+        if err_label != 'ERROR': #only use instance where both orig and correction label != error
+           return corr_label #label
         else:
             return 'ERROR'
 
@@ -389,32 +439,43 @@ def get_vchain_labels(vseq):
         @ret:
             tuple labels - tuple of labels, (tense/aspect, person/number)
     """
+    #a value of ERROR indicates no value for the property, the reason for this may or may not be due to an error
     filtered = [x for x in vseq.chain if (x.isverb() and x.pos != 'MD')]
+    aspect=''
+    person_number=''
     #check for other possible aspects
     if vseq.first().pos == 'TO' and vseq.length > 1:
         aspect = 'INF'
+        person_number = 'ERROR'
     elif len(filtered) == 1: #only 1 non model verb
         if filtered[0].pos == 'VBD' or filtered[0].pos == 'VBN':    
             aspect = 'PA_SIMPLE'
+            person_number = 'ERROR'
         else:
             aspect = 'PR_SIMPLE'
+            if filtered[0].pos == 'VBZ':
+                person_number = '3RD'
+            else:
+                person_number = '1ST'
 
-    seq = vseq.fst_sequence()
-#    transducer = fst.forgiving_vchain_transducer()
-    transducer = fst.vchain_transducer()
-    labels_list = transducer.transduce(seq)
-    if 'ERROR' in labels_list:
-        labels = ('ERROR', 'ERROR')
     else:
-        number_labels = ['PL', 'SING'] 
-        person_labels = [ '1ST', '3RD']
-        aspect_list = [x for x in labels_list if x not in number_labels and x not in person_labels]
-        person_list = [x for x in labels_list if x in person_labels]
-        number_list = [x for x in labels_list if x in number_labels]
-        person_list.extend(number_list) 
-        if not aspect:
+        seq = vseq.fst_sequence()
+    #    transducer = fst.forgiving_vchain_transducer()
+        transducer = fst.vchain_transducer()
+        labels_list = transducer.transduce(seq)
+        if 'ERROR' in labels_list:
+            labels = ('ERROR', 'ERROR')
+        else:
+            number_labels = ['PL'] #dont include SING since its implied if PL is not present 
+            person_labels = [ '1ST', '3RD']
+            aspect_list = [x for x in labels_list if x not in number_labels and x not in person_labels]
+
+            person_list = [x for x in labels_list if x in person_labels]
+            number_list = [x for x in labels_list if x in number_labels]
+
+            person_list.extend(number_list) 
             aspect = "_".join(aspect_list)
-        person_number = "_".join(person_list)
+            person_number = "_".join(person_list)
     return (aspect, person_number)
 
 def generate_aspect(seq):
@@ -557,15 +618,6 @@ def first_in_chain(tok, sentence):
             first = True
     return first
          
-class NullFeatures(Features): #do not really need this
-    'A class for features of null states'
-    def __init__(self, verb, s, subj=None):
-        """sen is a sentence object, verb is the token that comes after the Null State,
-            the subject of sentence can optionally be passed in for efficiency reasons"""
-        self.sentence = s
-        self.instance = Token('NULLSTATE', 'NULLSTATE', 'NULLSTATE', verb.tid)
-        self.label = 'NULLSTATE'
-        self.fvect = self.create_fvect() #holds all features
 
 class Sentence:
     'Holds the data for a instance of a sentence parsed from the xml output of Core NLP'
@@ -744,12 +796,13 @@ class Sentence:
                     started = True
         return chains
                 
+                
     def get_feats(self, corr=True):
         """Return a list of Correction Features for all verb chains in sentence, if a verb chain is 
             already correct, then its correction is the same as the error, only return features for instances 
             where the correction is equal to the verb chain
             @params:
-                corr - Whether to return features as CorrectionFeatures as opposed to regular Features
+                corr - Whether to return features as CorrectionFeatures as opposed to regular Features (outdated, has no effect now)
         """
         ret = []
         corr_stack = list(self.corr_pairs)
@@ -758,24 +811,11 @@ class Sentence:
             if all(x.in_delim for x in c.chain) and corr_stack: #if verb phrase is an error use the correct label
                 if corr_stack[len(corr_stack)-1].error.tostring() == c.tostring(): #only add data where the verb chain and error annotation match
                     corrfeats = CorrectionFeatures(corr_stack.pop(), self)
-                    if corr:
-                        feats = corrfeats
-                    else:
-                        feats = Features(c, self)
-                        if corrfeats.fvect[len(corrfeats.fvect) - 1] == 'ERROR': #if the correction is error, mark this in regular feat vect
-                            feats.fvect[len(feats.fvect) - 1] = 'ERROR'
-                    ret.append(feats)
+                    ret.append(corrfeats)
                 else:
                     corr_stack.pop()  #just dont use this correction instance if the verb chain/error annotation doesnt match
             else:
                 corrfeats = CorrectionFeatures(CorrectionPair(c, c), self)
-                if corr:
-                    feats = corrfeats
-                else:
-                    feats = Features(c, self)
-                    if corrfeats.fvect[len(corrfeats.fvect) -1] == 'ERROR': #if the correction is error, mark it in regular feat vect
-                        feats.fvect[len(feats.fvect) - 1] = 'ERROR'
-                ret.append(feats)
+                ret.append(corrfeats)
         return ret
-                
-            
+                    
