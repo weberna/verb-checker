@@ -82,6 +82,7 @@ def get_hit_stats(method_lab, gold_lab, orig_lab, false_neg_file=None):
 
 	return (true_pos, false_pos, inv_pos, false_neg)
 
+#DEPERACATED
 def find_false_instances(fneg_file, inst_file, out_file):
 	ifile = open(inst_file, 'r')
 	fnegfile = open(fneg_file, 'r')
@@ -99,6 +100,7 @@ def evaluate(method_out, gold_out, orig_out, get_fnegs=False):
 			filename method_out - output labels from method
 			filename gold_out - output labels from corrected data
 			filename orig_out - output labels from original data
+            get_fnegs - tells whether to print all false negatives to a seperate file (DEPRECATED)
 		@ret:
 			a tuple (precision, recall)
 	"""
@@ -132,7 +134,7 @@ if __name__ == "__main__":
 		method = sys.argv[1]	
 		gold = sys.argv[2]
 		orig = sys.argv[3]
-		results = evaluate(method, gold, orig, get_fnegs=True)
+		results = evaluate(method, gold, orig)
 		print("Precision: {}".format(results[0]))
 		print("Recall: {}".format(results[1]))
 

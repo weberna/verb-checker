@@ -386,7 +386,7 @@ class AspectFeatures(CorrectionFeatures):
 
 class PersonNumFeatures(CorrectionFeatures):   
     'Feature vector where person/number is used as a label'
-    def __init__(self, pair, s):
+    def __init__(self, createfrom, s):
         """
         PersonNumFeatures can be created from scratch (when createfrom is a CorrectionPair)
         or can be created from an exsisting CorrectionFeature object (when createfrom is a CorrectionFeature)
@@ -481,15 +481,21 @@ def get_vchain_labels(vseq):
             labels = ('ERROR', 'ERROR')
         else:
             number_labels = ['PL'] #dont include SING since its implied if PL is not present 
-            person_labels = [ '1ST', '3RD']
+            person_labels = [ '1ST', '3RD'] 
             aspect_list = [x for x in labels_list if x not in number_labels and x not in person_labels]
 
             person_list = [x for x in labels_list if x in person_labels]
             number_list = [x for x in labels_list if x in number_labels]
 
-            person_list.extend(number_list) 
             aspect = "_".join(aspect_list)
-            person_number = "_".join(person_list)
+            # person_list.extend(number_list) 
+            #Grammatically, if we get a plural label, then it doesnt matter whether its 1st or 3rd person,
+            #(use same auxilary verbs), so dont include person_labels if we get a PL tag
+            if not number_list:
+                person_number = "_".join(person_list)
+            else:
+                person_number = "_".join(number_list)
+
     return (aspect, person_number)
 
 def generate_aspect(seq):
