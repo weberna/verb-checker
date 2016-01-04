@@ -1,11 +1,10 @@
-%function X = readInstances(filename, t)
 function [X, Y] = readInstances(filename, t)
 %
 % Read in sample data from filename, each row of this file represents
 % a sample
 %
 % t denotes how many tasks the sample data is for, and thus determines how many labels
-% are on each sample. The first t entries in a row are labels.
+% are on each sample. The first t entries in a row are labels (normally just use 1)
 %
 % @ret: Returns a cell array X and Y,
 %
